@@ -407,9 +407,11 @@ def create_graph_routes(rag, api_key: Optional[str] = None):
         ),
         max_depth: int = Query(
             2,
-            description="Causal expansion depth for fault-causes",
+            description=(
+                "Causal expansion depth for fault-causes. Total work remains "
+                "bounded by max_nodes."
+            ),
             ge=1,
-            le=10,
         ),
         max_nodes: int = Query(1000, description="Maximum nodes to return", ge=1),
     ):

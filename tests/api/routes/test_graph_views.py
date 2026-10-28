@@ -107,6 +107,25 @@ def test_fault_causes_requires_an_explicit_root():
     assert "requires root" in response.json()["detail"]
 
 
+def test_fault_causes_accepts_depth_above_ten():
+    response = _client().get(
+        "/graph/views/fault-causes?root=出口压力不足&max_depth=11&max_nodes=100",
+        headers={"X-API-Key": "test-key"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["root"] == "出口压力不足"
+
+
+def test_fault_causes_still_rejects_depth_below_one():
+    response = _client().get(
+        "/graph/views/fault-causes?root=出口压力不足&max_depth=0",
+        headers={"X-API-Key": "test-key"},
+    )
+
+    assert response.status_code == 422
+
+
 def test_fault_causes_rejects_a_non_fault_event_root():
     response = _client().get(
         "/graph/views/fault-causes?root=P-101A",

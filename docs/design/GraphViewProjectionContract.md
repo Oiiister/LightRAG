@@ -19,6 +19,10 @@ their effect. Rules reachable from the root through `HAS_CAUSE_RULE` are
 included as metadata; they do not make the traversal leave the causal edge
 set.
 
+`max_depth` has a lower bound of 1 but no separate upper bound. Every view is
+bounded by `max_nodes`, so increasing traversal depth cannot bypass the
+projection's work and response limits.
+
 The Department node in the first two views is the workspace anchor
 (`department:<workspace>`). It is synthesized by the projection instead of
 being written as an ordinary entity. G1 derives File nodes from the workspace's
