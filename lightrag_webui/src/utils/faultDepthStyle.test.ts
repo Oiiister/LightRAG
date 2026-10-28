@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   FAULT_DEPTH_STYLES,
-  resolveFaultDepthStyle
+  LOGIC_GATE_NODE_SIZE,
+  resolveFaultDepthStyle,
+  resolveFaultViewNodeSize
 } from '@/utils/faultDepthStyle'
 
 describe('resolveFaultDepthStyle', () => {
@@ -27,5 +29,24 @@ describe('resolveFaultDepthStyle', () => {
   test('does not restyle non-fault nodes', () => {
     expect(resolveFaultDepthStyle('LogicGate', 0)).toBeNull()
     expect(resolveFaultDepthStyle('Equipment', 0)).toBeNull()
+  })
+
+  test('uses one fixed size for gates at every depth', () => {
+    expect(resolveFaultViewNodeSize('LogicGate', 0, 8)).toBe(
+      LOGIC_GATE_NODE_SIZE
+    )
+    expect(resolveFaultViewNodeSize('logicgate', 5, 20)).toBe(
+      LOGIC_GATE_NODE_SIZE
+    )
+    expect(resolveFaultViewNodeSize('逻辑门', 2, 4)).toBe(
+      LOGIC_GATE_NODE_SIZE
+    )
+  })
+
+  test('keeps fault depth sizing and fallback sizing for other node types', () => {
+    expect(resolveFaultViewNodeSize('FaultEvent', 2, 4)).toBe(
+      FAULT_DEPTH_STYLES[2].size
+    )
+    expect(resolveFaultViewNodeSize('Equipment', 2, 11)).toBe(11)
   })
 })

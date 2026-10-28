@@ -14,7 +14,10 @@ import { useBackendState } from '@/stores/state'
 import { useSettingsStore } from '@/stores/settings'
 
 import { resolveNodeColor, DEFAULT_NODE_COLOR } from '@/utils/graphColor'
-import { resolveFaultDepthStyle } from '@/utils/faultDepthStyle'
+import {
+  resolveFaultDepthStyle,
+  resolveFaultViewNodeSize
+} from '@/utils/faultDepthStyle'
 import { resolveNodeType } from '@/utils/nodeType'
 import { formatGraphLabel } from '@/utils/graphLabel'
 import { applyCausalLayeredPositions } from '@/utils/causalGraphLayout'
@@ -144,6 +147,16 @@ const parseEdgeWeight = (properties: Record<string, unknown> | undefined): numbe
 // — fall back to the node id so the rest of the graph still renders.
 const safeNodeLabel = (labels: unknown, fallbackId: string): string =>
   formatGraphLabel(Array.isArray(labels) ? labels.join(', ') : fallbackId)
+
+const resolveGraphNodeSize = (
+  viewId: GraphViewId,
+  nodeType: unknown,
+  viewDepth: unknown,
+  fallbackSize: number
+): number =>
+  viewId === 'fault-causes'
+    ? resolveFaultViewNodeSize(nodeType, viewDepth, fallbackSize)
+    : fallbackSize
 
 export type NodeType = {
   x: number
@@ -301,9 +314,12 @@ const createSigmaGraph = async (
     rawNode.color =
       faultStyle?.color ||
       typeColors.colorFor(rawNode.properties?.entity_type)
-    if (faultStyle) {
-      rawNode.size = faultStyle.size
-    }
+    rawNode.size = resolveGraphNodeSize(
+      graphViewId,
+      rawNode.properties?.entity_type,
+      rawNode.properties?._view_depth,
+      rawNode.size
+    )
 
     graph.addNode(rawNode.id, {
       label: safeNodeLabel(rawNode.labels, rawNode.id),
@@ -1001,6 +1017,7 @@ const useLightrangeGraph = () => {
           // Calculate derived values inside the function
           const range = maxDegree - minDegree || 1 // Avoid division by zero
           const scale = Constants.maxNodeSize - Constants.minNodeSize
+          const viewId = useGraphStore.getState().graphViewId
 
           // Update node sizes
           for (const nodeId of nodesWithDiscardedEdges) {
@@ -1010,11 +1027,20 @@ const useLightrangeGraph = () => {
               // Limit newDegree to maxDegree + 1 to prevent nodes from being too large
               const limitedDegree = Math.min(newDegree, maxDegree + 1)
 
-              const newSize = Math.round(
+              const degreeSize = Math.round(
                 Constants.minNodeSize + scale * Math.pow((limitedDegree - minDegree) / range, 0.5)
               )
 
-              sigmaGraph.setNodeAttribute(nodeId, 'size', newSize)
+              sigmaGraph.setNodeAttribute(
+                nodeId,
+                'size',
+                resolveGraphNodeSize(
+                  viewId,
+                  sigmaGraph.getNodeAttribute(nodeId, 'nodeType'),
+                  sigmaGraph.getNodeAttribute(nodeId, 'viewDepth'),
+                  degreeSize
+                )
+              )
             }
           }
         }
@@ -1103,7 +1129,12 @@ const useLightrangeGraph = () => {
                 newNode.properties?._view_depth
               )
               : null
-          const nodeSize = faultStyle?.size || degreeSize
+          const nodeSize = resolveGraphNodeSize(
+            useGraphStore.getState().graphViewId,
+            newNode.properties?.entity_type,
+            newNode.properties?._view_depth,
+            degreeSize
+          )
 
           // Calculate angle for polar coordinates
           const angle = 2 * Math.PI * (newNodeIdx / nodesToAddList.length)
@@ -1210,8 +1241,14 @@ const useLightrangeGraph = () => {
         if (sigmaGraph.hasNode(nodeId)) {
           const finalDegree = sigmaGraph.degree(nodeId)
           const limitedDegree = Math.min(finalDegree, maxDegree + 1)
-          const newSize = Math.round(
+          const degreeSize = Math.round(
             Constants.minNodeSize + scale * Math.pow((limitedDegree - minDegree) / range, 0.5)
+          )
+          const newSize = resolveGraphNodeSize(
+            useGraphStore.getState().graphViewId,
+            nodeToExpand.properties?.entity_type,
+            nodeToExpand.properties?._view_depth,
+            degreeSize
           )
           sigmaGraph.setNodeAttribute(nodeId, 'size', newSize)
           nodeToExpand.size = newSize
