@@ -17,6 +17,7 @@ import Checkbox from '@/components/ui/Checkbox'
 import UploadDocumentsDialog from '@/components/documents/UploadDocumentsDialog'
 import ClearDocumentsDialog from '@/components/documents/ClearDocumentsDialog'
 import DeleteDocumentsDialog from '@/components/documents/DeleteDocumentsDialog'
+import DocumentFilePreviewDialog from '@/components/documents/DocumentFilePreviewDialog'
 import PaginationControls from '@/components/ui/PaginationControls'
 import {
   Dialog,
@@ -42,7 +43,7 @@ import { toast } from 'sonner'
 import { useBackendState } from '@/stores/state'
 import { copyToClipboard } from '@/utils/clipboard'
 
-import { RefreshCwIcon, ActivityIcon, ArrowUpIcon, ArrowDownIcon, RotateCcwIcon, CheckSquareIcon, XIcon, AlertTriangle, Info, CopyIcon } from 'lucide-react'
+import { RefreshCwIcon, ActivityIcon, ArrowUpIcon, ArrowDownIcon, RotateCcwIcon, CheckSquareIcon, XIcon, AlertTriangle, Info, CopyIcon, Eye } from 'lucide-react'
 import PipelineStatusDialog from '@/components/documents/PipelineStatusDialog'
 import {
   getStatusRequestFilters,
@@ -211,6 +212,11 @@ const hasDocumentDetails = (doc: DocStatusResponse): boolean => {
     (doc.metadata && Object.keys(doc.metadata).length > 0)
   )
 }
+
+const canPreviewSourceFile = (doc: DocStatusResponse): boolean =>
+  doc.status === 'processed' &&
+  Boolean(doc.file_path) &&
+  doc.file_path !== 'unknown_source'
 
 const formatDocumentDetails = (doc: DocStatusResponse): string => {
   const details: string[] = []
@@ -401,6 +407,7 @@ export default function DocumentManager() {
   }, []);
 
   const [showPipelineStatus, setShowPipelineStatus] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState<DocStatusResponse | null>(null)
   const { t, i18n } = useTranslation()
   const health = useBackendState.use.health()
   const pipelineActive = useBackendState.use.pipelineActive()
@@ -1819,6 +1826,20 @@ export default function DocumentManager() {
                                 })()}
 
                                 {hasDocumentDetails(doc) && <DocumentStatusDetailsDialog doc={doc} />}
+                                {canPreviewSourceFile(doc) && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="ml-1 size-7"
+                                    onClick={() => setPreviewDoc(doc)}
+                                    tooltip={t('documentPanel.documentManager.preview.openTooltip')}
+                                    side="top"
+                                    aria-label={t('documentPanel.documentManager.preview.openTooltip')}
+                                  >
+                                    <Eye className="h-4 w-4 text-blue-500" />
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>{doc.content_length ?? '-'}</TableCell>
@@ -1848,6 +1869,15 @@ export default function DocumentManager() {
           </CardContent>
         </Card>
       </CardContent>
+      {previewDoc && (
+        <DocumentFilePreviewDialog
+          doc={previewDoc}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPreviewDoc(null)
+          }}
+        />
+      )}
     </Card>
   )
 }

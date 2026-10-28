@@ -7,15 +7,10 @@ import { SiteInfo } from '@/lib/constants'
 import { entryHomeHref } from '@/lib/pathPrefix'
 import { useBackendState, useAuthStore } from '@/stores/state'
 import { useSettingsStore } from '@/stores/settings'
-import { getAuthStatus } from '@/api/lightrag'
-import {
-  activateLoginIdentityFromToken,
-  useIdentityEpochStore
-} from '@/lib/loginIdentity'
-import {
-  markVersionCheckedFromLogin,
-  wasVersionCheckedThisPageLoad
-} from '@/lib/versionCheckCache'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { getAuthStatus, getWorkspaces } from '@/api/lightrag'
+import { activateLoginIdentityFromToken, useIdentityEpochStore } from '@/lib/loginIdentity'
+import { markVersionCheckedFromLogin, wasVersionCheckedThisPageLoad } from '@/lib/versionCheckCache'
 import SiteHeader from '@/features/SiteHeader'
 import { InvalidApiKeyError, RequireApiKeError } from '@/api/lightrag'
 import { ZapIcon } from 'lucide-react'
@@ -32,13 +27,15 @@ function App() {
   const message = useBackendState.use.message()
   const enableHealthCheck = useSettingsStore.use.enableHealthCheck()
   const currentTab = useSettingsStore.use.currentTab()
+  const activeWorkspaceId = useWorkspaceStore.use.activeWorkspaceId()
   const [apiKeyAlertOpen, setApiKeyAlertOpen] = useState(false)
   const [initializing, setInitializing] = useState(true) // Add initializing state
+  const [workspaceReady, setWorkspaceReady] = useState(false)
   // Bumped by the cross-tab identity watch: remounting the retrieval view
   // drops the live session state that belonged to the previous identity.
   const identityEpoch = useIdentityEpochStore((s) => s.epoch)
-  const versionCheckRef = useRef(false); // Prevent duplicate calls in Vite dev mode
-  const healthCheckInitializedRef = useRef(false); // Prevent duplicate health checks in Vite dev mode
+  const versionCheckRef = useRef(false) // Prevent duplicate calls in Vite dev mode
+  const healthCheckInitializedRef = useRef(false) // Prevent duplicate health checks in Vite dev mode
   const pageRestoreGeneration = usePageRestoreGeneration()
 
   const handleApiKeyAlertOpenChange = useCallback((open: boolean) => {
@@ -49,84 +46,88 @@ function App() {
   }, [])
 
   // Track component mount status with useRef
-  const isMountedRef = useRef(true);
+  const isMountedRef = useRef(true)
 
   // Set up React mount/unmount status tracking. Do not treat beforeunload as
   // an unmount: a BFCache navigation fires it without destroying this React
   // tree, and the restored page would otherwise keep this ref false forever.
   useEffect(() => {
-    isMountedRef.current = true;
+    isMountedRef.current = true
 
     return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
+      isMountedRef.current = false
+    }
+  }, [])
 
   // Health check - can be disabled
   useEffect(() => {
+    if (!workspaceReady) {
+      useBackendState.getState().clearHealthCheckTimer()
+      return
+    }
     // Health check function
     const performHealthCheck = async () => {
       try {
         // Only perform health check if component is still mounted
         if (isMountedRef.current) {
-          await useBackendState.getState().check();
+          await useBackendState.getState().check()
         }
       } catch (error) {
-        console.error('Health check error:', error);
+        console.error('Health check error:', error)
       }
-    };
+    }
 
     // Set health check function in the store
-    useBackendState.getState().setHealthCheckFunction(performHealthCheck);
+    useBackendState.getState().setHealthCheckFunction(performHealthCheck)
 
     if (!enableHealthCheck || apiKeyAlertOpen) {
-      useBackendState.getState().clearHealthCheckTimer();
+      useBackendState.getState().clearHealthCheckTimer()
       // With periodic checks disabled the header still needs to know whether
       // the backend serves /docs. Resolve that capability alone (RFC #3671) —
       // never through `check()`, whose failure path would latch `health: false`
       // and stop the document list polling with no timer left to recover it.
       if (!enableHealthCheck && !apiKeyAlertOpen) {
-        useBackendState.getState().probeApiDocsCapability();
+        useBackendState.getState().probeApiDocsCapability()
       }
-      return;
+      return
     }
 
     // On first mount or when enableHealthCheck becomes true and apiKeyAlertOpen is false,
     // perform an immediate health check and start the timer
     if (!healthCheckInitializedRef.current) {
-      healthCheckInitializedRef.current = true;
+      healthCheckInitializedRef.current = true
     }
 
     // Start/reset the health check timer using the store
-    useBackendState.getState().resetHealthCheckTimer();
+    useBackendState.getState().resetHealthCheckTimer()
 
     // Component unmount cleanup
     return () => {
-      useBackendState.getState().clearHealthCheckTimer();
-    };
-  }, [enableHealthCheck, apiKeyAlertOpen, pageRestoreGeneration]);
+      useBackendState.getState().clearHealthCheckTimer()
+    }
+  }, [enableHealthCheck, apiKeyAlertOpen, pageRestoreGeneration, workspaceReady])
 
   // Version check - independent and executed only once
   useEffect(() => {
     const checkVersion = async () => {
       // Prevent duplicate calls in Vite dev mode
-      if (versionCheckRef.current) return;
-      versionCheckRef.current = true;
+      if (versionCheckRef.current) return
+      versionCheckRef.current = true
 
       // Skip only the request the login page just made in THIS page load: a
       // reload must reconcile again, since the server's auth mode can have
       // changed under a still-valid stored token (see versionCheckCache).
       if (wasVersionCheckedThisPageLoad()) {
-        setInitializing(false); // Skip initialization if already checked
-        return;
+        setInitializing(false) // Skip initialization if already checked
+        return
       }
 
       try {
-        setInitializing(true); // Start initialization
+        setInitializing(true) // Start initialization
 
         // Get version info
-        const token = localStorage.getItem('LIGHTRAG-API-TOKEN');
-        const status = await getAuthStatus();
+        const token = localStorage.getItem('LIGHTRAG-API-TOKEN')
+        const status = await getAuthStatus()
 
         // If auth is not configured and a new token is returned, use the new token.
         // A fresh guest activation is an identity transition: clear the previous
@@ -140,33 +141,66 @@ function App() {
             status.api_version,
             status.webui_title || null,
             status.webui_description || null
-          );
-        } else if (token && (status.core_version || status.api_version || status.webui_title || status.webui_description)) {
+          )
+        } else if (
+          token &&
+          (status.core_version ||
+            status.api_version ||
+            status.webui_title ||
+            status.webui_description)
+        ) {
           // Otherwise use the old token (if it exists)
-          const isGuestMode = status.auth_mode === 'disabled' || useAuthStore.getState().isGuestMode;
-          useAuthStore.getState().login(
-            token,
-            isGuestMode,
-            status.core_version,
-            status.api_version,
-            status.webui_title || null,
-            status.webui_description || null
-          );
+          const isGuestMode = status.auth_mode === 'disabled' || useAuthStore.getState().isGuestMode
+          useAuthStore
+            .getState()
+            .login(
+              token,
+              isGuestMode,
+              status.core_version,
+              status.api_version,
+              status.webui_title || null,
+              status.webui_description || null
+            )
         }
 
         // Set flag to indicate version info has been checked
-        markVersionCheckedFromLogin();
+        markVersionCheckedFromLogin()
       } catch (error) {
-        console.error('Failed to get version info:', error);
+        console.error('Failed to get version info:', error)
       } finally {
         // Ensure initializing is set to false even if there's an error
-        setInitializing(false);
+        setInitializing(false)
       }
-    };
+    }
 
     // Execute version check
-    checkVersion();
-  }, []); // Empty dependency array ensures it only runs once on mount
+    checkVersion()
+  }, []) // Empty dependency array ensures it only runs once on mount
+
+  useEffect(() => {
+    if (initializing) return
+    let cancelled = false
+    void getWorkspaces()
+      .then((response) => {
+        if (cancelled) return
+        useWorkspaceStore
+          .getState()
+          .setWorkspaceList(response.workspaces, response.default_workspace_id)
+      })
+      .catch((error) => {
+        if (cancelled) return
+        // A stale stored id must not block the app when registry discovery
+        // failed. Fall back to the deployment default (no request header).
+        useWorkspaceStore.setState({ activeWorkspaceId: null })
+        console.error('Failed to load workspaces:', error)
+      })
+      .finally(() => {
+        if (!cancelled) setWorkspaceReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [initializing])
 
   const handleTabChange = useCallback(
     (tab: string) => useSettingsStore.getState().setCurrentTab(tab as any),
@@ -186,33 +220,34 @@ function App() {
   return (
     <ThemeProvider>
       <TabVisibilityProvider>
-        {initializing ? (
+        {initializing || !workspaceReady ? (
           // Loading state while initializing with simplified header
           <div className="flex h-screen w-screen flex-col">
             {/* Simplified header during initialization - matches SiteHeader structure */}
             <header className="border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 flex h-10 w-full border-b px-4 backdrop-blur">
-              <div className="min-w-[200px] w-auto flex items-center">
+              <div className="flex w-auto min-w-[200px] items-center">
                 {/* Document-relative brand link — resolves to this entry's own
                     root (see SiteHeader / entryHomeHref). */}
-                <a href={entryHomeHref(window.location.pathname)} className="flex items-center gap-2">
+                <a
+                  href={entryHomeHref(window.location.pathname)}
+                  className="flex items-center gap-2"
+                >
                   <ZapIcon className="size-4 text-emerald-400" aria-hidden="true" />
                   <span className="font-bold md:inline-block">{SiteInfo.name}</span>
                 </a>
               </div>
 
               {/* Empty middle section to maintain layout */}
-              <div className="flex h-10 flex-1 items-center justify-center">
-              </div>
+              <div className="flex h-10 flex-1 items-center justify-center"></div>
 
               {/* Empty right section to maintain layout */}
-              <nav className="w-[200px] flex items-center justify-end">
-              </nav>
+              <nav className="flex w-[200px] items-center justify-end"></nav>
             </header>
 
             {/* Loading indicator in content area */}
             <div className="flex flex-1 items-center justify-center">
               <div className="text-center">
-                <div className="mb-2 h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto"></div>
+                <div className="border-primary mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
                 <p>Initializing...</p>
               </div>
             </div>
@@ -222,24 +257,35 @@ function App() {
           <main className="flex h-screen w-screen overflow-hidden">
             <Tabs
               defaultValue={currentTab}
-              className="!m-0 flex grow flex-col !p-0 overflow-hidden"
+              className="!m-0 flex grow flex-col overflow-hidden !p-0"
               onValueChange={handleTabChange}
             >
               <SiteHeader />
               <div className="relative grow">
-                <TabsContent value="documents" className="absolute top-0 right-0 bottom-0 left-0 overflow-auto">
+                <TabsContent
+                  value="documents"
+                  className="absolute top-0 right-0 bottom-0 left-0 overflow-auto"
+                >
                   <ErrorBoundary>
-                    <DocumentManager />
+                    <DocumentManager key={`documents:${activeWorkspaceId ?? 'default'}`} />
                   </ErrorBoundary>
                 </TabsContent>
-                <TabsContent value="knowledge-graph" className="absolute top-0 right-0 bottom-0 left-0 overflow-hidden">
+                <TabsContent
+                  value="knowledge-graph"
+                  className="absolute top-0 right-0 bottom-0 left-0 overflow-hidden"
+                >
                   <ErrorBoundary>
-                    <GraphViewer />
+                    <GraphViewer key={`graph:${activeWorkspaceId ?? 'default'}`} />
                   </ErrorBoundary>
                 </TabsContent>
-                <TabsContent value="retrieval" className="absolute top-0 right-0 bottom-0 left-0 overflow-hidden">
+                <TabsContent
+                  value="retrieval"
+                  className="absolute top-0 right-0 bottom-0 left-0 overflow-hidden"
+                >
                   <ErrorBoundary>
-                    <RetrievalView key={identityEpoch} />
+                    <RetrievalView
+                      key={`retrieval:${identityEpoch}:${activeWorkspaceId ?? 'default'}`}
+                    />
                   </ErrorBoundary>
                 </TabsContent>
               </div>

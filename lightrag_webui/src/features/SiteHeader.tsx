@@ -12,6 +12,7 @@ import { ZapIcon, LogOutIcon, BookOpenIcon } from 'lucide-react'
 import GithubIcon from '@/components/icons/GithubIcon'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip'
 import TouchDescriptionPopover from '@/components/ui/TouchDescriptionPopover'
+import WorkspaceSwitcher from '@/components/workspace/WorkspaceSwitcher'
 
 interface NavigationTabProps {
   value: string
@@ -56,7 +57,8 @@ function TabsNavigation() {
 
 export default function SiteHeader() {
   const { t } = useTranslation()
-  const { isGuestMode, coreVersion, apiVersion, username, webuiTitle, webuiDescription } = useAuthStore()
+  const { isGuestMode, coreVersion, apiVersion, username, webuiTitle, webuiDescription } =
+    useAuthStore()
   const theme = useSettingsStore.use.theme()
   // Tri-state on purpose — 'unknown' (no successful /health yet) hides the
   // entry point rather than guessing; see apiDocsCapability in stores/state.ts.
@@ -65,23 +67,23 @@ export default function SiteHeader() {
   // consistent with the WebUI ('system' falls back to the OS preference).
   const apiDocsUrl = `${backendBaseUrl}/docs?theme=${theme === 'system' ? 'auto' : theme}`
 
-  const versionDisplay = (coreVersion && apiVersion)
-    ? `${coreVersion}/${apiVersion}`
-    : null;
+  const versionDisplay = coreVersion && apiVersion ? `${coreVersion}/${apiVersion}` : null
 
   // Check if frontend needs rebuild (apiVersion ends with warning symbol)
-  const hasWarning = apiVersion?.endsWith('⚠️');
+  const hasWarning = apiVersion?.endsWith('⚠️')
   const versionTooltip = hasWarning
     ? t('header.frontendNeedsRebuild')
-    : versionDisplay ? `v${versionDisplay}` : '';
+    : versionDisplay
+      ? `v${versionDisplay}`
+      : ''
 
   const handleLogout = () => {
-    navigationService.navigateToUnauthenticated();
+    navigationService.navigateToUnauthenticated()
   }
 
   return (
     <header className="border-border/40 bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50 flex h-10 w-full border-b px-4 backdrop-blur">
-      <div className="min-w-[200px] w-auto flex items-center">
+      <div className="flex w-auto min-w-[200px] items-center gap-2">
         {/* Document-relative brand link: under HashRouter the pathname always
             names this entry, so this resolves back to THIS entry — never a
             cross-entry jump, under any proxy prefix or the dev server's
@@ -94,44 +96,44 @@ export default function SiteHeader() {
                 <span className="font-bold md:inline-block">{SiteInfo.name}</span>
                 {webuiTitle && (
                   <>
-                    <span className="mx-1 text-xs text-gray-500 dark:text-gray-400" aria-hidden="true">|</span>
+                    <span
+                      className="mx-1 text-xs text-gray-500 dark:text-gray-400"
+                      aria-hidden="true"
+                    >
+                      |
+                    </span>
                     <span className="text-sm font-medium">{webuiTitle}</span>
                   </>
                 )}
               </a>
             </TooltipTrigger>
-            {webuiDescription && (
-              <TooltipContent side="bottom">
-                {webuiDescription}
-              </TooltipContent>
-            )}
+            {webuiDescription && <TooltipContent side="bottom">{webuiDescription}</TooltipContent>}
           </Tooltip>
         </TooltipProvider>
         <TouchDescriptionPopover description={webuiDescription} />
+        <WorkspaceSwitcher />
       </div>
 
       <div className="flex h-10 flex-1 items-center justify-center">
         <TabsNavigation />
         {isGuestMode && (
-          <div className="ml-2 self-center px-2 py-1 text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 rounded-md">
+          <div className="ml-2 self-center rounded-md bg-amber-100 px-2 py-1 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-200">
             {t('login.guestMode', 'Guest Mode')}
           </div>
         )}
       </div>
 
-      <nav className="w-[200px] flex items-center justify-end">
+      <nav className="flex w-[200px] items-center justify-end">
         <div className="flex items-center gap-2">
           {versionDisplay && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 mr-1 cursor-default">
+                  <span className="mr-1 cursor-default text-xs text-gray-500 dark:text-gray-400">
                     v{versionDisplay}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  {versionTooltip}
-                </TooltipContent>
+                <TooltipContent side="bottom">{versionTooltip}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}

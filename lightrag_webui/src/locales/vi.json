@@ -116,6 +116,16 @@
         "fileTooLarge": "Tệp quá lớn, kích thước tối đa là {{maxSize}}",
         "dropHere": "Thả tệp vào đây",
         "dragAndDrop": "Kéo và thả tệp vào đây, hoặc nhấp để chọn tệp",
+        "previewFile": "Xem trước tệp",
+        "previewDescription": "{{size}} · Xem trước cục bộ",
+        "previewImageAlt": "Xem trước {{name}}",
+        "previewPdfTitle": "Xem trước PDF của {{name}}",
+        "previewLoading": "Đang tải bản xem trước...",
+        "previewError": "Không thể đọc tệp này.",
+        "previewTruncated": "Chỉ hiển thị {{maxSize}} đầu tiên của tệp này.",
+        "previewEmptyFile": "Tệp này trống.",
+        "previewUnavailableTitle": "Không thể xem trước",
+        "previewUnavailableDescription": "Trình duyệt không thể xem trước loại tệp này, nhưng bạn vẫn có thể tải lên.",
         "removeFile": "Xóa tệp",
         "uploadDescription": "Bạn có thể tải lên {{isMultiple ? 'nhiều' : count}} tệp (tối đa {{maxSize}} mỗi tệp)",
         "duplicateFile": "Tên tệp đã tồn tại trong bộ nhớ cache của máy chủ"
@@ -175,6 +185,10 @@
       "hideButton": "Ẩn",
       "showFileNameTooltip": "Hiện tên tệp",
       "hideFileNameTooltip": "Ẩn tên tệp",
+      "preview": {
+        "openTooltip": "Xem trước tệp gốc",
+        "loadFailed": "Không thể tải tệp gốc\n{{error}}"
+      },
       "details": {
         "title": "Chi tiết trạng thái",
         "openTooltip": "Xem chi tiết trạng thái",

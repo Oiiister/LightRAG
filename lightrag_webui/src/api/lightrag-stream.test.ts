@@ -139,6 +139,7 @@ function installFetchMock(
 let apiModule: typeof import('./lightrag')
 let settingsStore: typeof import('@/stores/settings').useSettingsStore
 let authStore: typeof import('@/stores/state').useAuthStore
+let workspaceStore: typeof import('@/stores/workspace').useWorkspaceStore
 
 // Several suites below intentionally drive queryTextStream's failure branches
 // (HTTP errors, network errors, truncated streams). By design the module logs
@@ -154,6 +155,7 @@ beforeAll(async () => {
   // modules — see the isolation note at the top of this file.
   settingsStore = (await import('@/stores/settings')).useSettingsStore
   authStore = (await import('@/stores/state')).useAuthStore
+  workspaceStore = (await import('@/stores/workspace')).useWorkspaceStore
   const { navigationService } = await import('@/services/navigation')
   apiModule = await import('./lightrag')
 
@@ -179,6 +181,11 @@ afterEach(() => {
   // Reset the REAL stores' state this file drives (the guest-retry tests go
   // through the real login(), which flips isAuthenticated/username too).
   settingsStore.setState({ apiKey: null })
+  workspaceStore.setState({
+    workspaces: [],
+    activeWorkspaceId: null,
+    defaultWorkspaceId: null
+  })
   authStore.setState({
     isGuestMode: false,
     isAuthenticated: false,
@@ -529,6 +536,27 @@ describe('queryTextStream — auth headers', () => {
 
     const sentHeaders = capturedHeaders as Record<string, string>
     expect(sentHeaders['Authorization']).toBeUndefined()
+  })
+
+  test('includes the active workspace on the streaming request', async () => {
+    workspaceStore.setState({
+      activeWorkspaceId: 'ws_research',
+      defaultWorkspaceId: 'default'
+    })
+    let capturedHeaders: HeadersInit | undefined
+    installFetchMock((_url: string, init?: RequestInit) => {
+      capturedHeaders = init?.headers
+      return makeNdjsonResponse(['{"response": "ok"}'])
+    })
+
+    await apiModule.queryTextStream(
+      makeQueryRequest(),
+      () => {},
+      () => {}
+    )
+
+    const sentHeaders = capturedHeaders as Record<string, string>
+    expect(sentHeaders['LIGHTRAG-WORKSPACE']).toBe('ws_research')
   })
 
   test('calls /query/stream endpoint', async () => {

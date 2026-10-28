@@ -3,7 +3,7 @@
  */
 
 import * as React from 'react'
-import { FileText, Upload, X } from 'lucide-react'
+import { Eye, FileText, Upload, X } from 'lucide-react'
 import Dropzone, { type DropzoneProps, type FileRejection } from 'react-dropzone'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
@@ -11,8 +11,10 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useControllableState } from '@radix-ui/react-use-controllable-state'
 import Button from '@/components/ui/Button'
+import FilePreviewDialog, { type PreviewFile } from '@/components/ui/FilePreviewDialog'
 import { ScrollArea } from '@/components/ui/ScrollArea'
 import { supportedFileTypes } from '@/lib/constants'
+import { formatFileSize, getFilePreviewKind } from '@/lib/filePreview'
 import {
   flattenAcceptExtensions,
   formatFileTypesLabel,
@@ -130,24 +132,6 @@ interface FileUploaderProps extends React.HTMLAttributes<HTMLDivElement> {
   description?: string
 }
 
-function formatBytes(
-  bytes: number,
-  opts: {
-    decimals?: number
-    sizeType?: 'accurate' | 'normal'
-  } = {}
-) {
-  const { decimals = 0, sizeType = 'normal' } = opts
-
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
-  const accurateSizes = ['Bytes', 'KiB', 'MiB', 'GiB', 'TiB']
-  if (bytes === 0) return '0 Byte'
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return `${(bytes / Math.pow(1024, i)).toFixed(decimals)} ${
-    sizeType === 'accurate' ? (accurateSizes[i] ?? 'Bytes') : (sizes[i] ?? 'Bytes')
-  }`
-}
-
 function FileUploader(props: FileUploaderProps) {
   const { t } = useTranslation()
   const {
@@ -180,6 +164,12 @@ function FileUploader(props: FileUploaderProps) {
     defaultProp: [],
     onChange: onValueChange
   })
+  const [previewFile, setPreviewFile] = React.useState<PreviewableFile | null>(null)
+  const filesRef = React.useRef<File[]>([])
+
+  React.useEffect(() => {
+    filesRef.current = files ?? []
+  }, [files])
 
   const onDrop = React.useCallback(
     (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
@@ -260,7 +250,14 @@ function FileUploader(props: FileUploaderProps) {
 
   function onRemove(index: number) {
     if (!files) return
+    const removedFile = files[index]
     const newFiles = files.filter((_, i) => i !== index)
+    if (isFileWithPreview(removedFile)) {
+      URL.revokeObjectURL(removedFile.preview)
+    }
+    if (removedFile === previewFile) {
+      setPreviewFile(null)
+    }
     setFiles(newFiles)
     onValueChange?.(newFiles)
   }
@@ -268,14 +265,12 @@ function FileUploader(props: FileUploaderProps) {
   // Revoke preview url when component unmounts
   React.useEffect(() => {
     return () => {
-      if (!files) return
-      files.forEach((file) => {
+      filesRef.current.forEach((file) => {
         if (isFileWithPreview(file)) {
           URL.revokeObjectURL(file.preview)
         }
       })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const isDisabled = disabled || (files?.length ?? 0) >= maxFileCount
@@ -317,7 +312,7 @@ function FileUploader(props: FileUploaderProps) {
             return {
               code: 'file-too-large',
               message: t('documentPanel.uploadDocuments.fileUploader.fileTooLarge', {
-                maxSize: formatBytes(maxSize)
+                maxSize: formatFileSize(maxSize)
               })
             };
           }
@@ -361,7 +356,7 @@ function FileUploader(props: FileUploaderProps) {
                       {t('documentPanel.uploadDocuments.fileUploader.uploadDescription', {
                         count: maxFileCount,
                         isMultiple: maxFileCount === Infinity,
-                        maxSize: formatBytes(maxSize)
+                        maxSize: formatFileSize(maxSize)
                       })}
                       {t('documentPanel.uploadDocuments.fileTypes', {
                         types: formatFileTypesLabel([...acceptedExts])
@@ -382,6 +377,9 @@ function FileUploader(props: FileUploaderProps) {
                 key={index}
                 file={file}
                 onRemove={() => onRemove(index)}
+                onPreview={
+                  isFileWithPreview(file) ? () => setPreviewFile(file) : undefined
+                }
                 progress={progresses?.[file.name]}
                 error={fileErrors?.[file.name]}
               />
@@ -389,6 +387,15 @@ function FileUploader(props: FileUploaderProps) {
           </div>
         </ScrollArea>
       ) : null}
+      <FilePreviewDialog
+        file={previewFile ? toPreviewFile(previewFile) : null}
+        open={previewFile !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewFile(null)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -418,11 +425,12 @@ function Progress({ value, error }: ProgressProps) {
 interface FileCardProps {
   file: File
   onRemove: () => void
+  onPreview?: () => void
   progress?: number
   error?: string
 }
 
-function FileCard({ file, progress, error, onRemove }: FileCardProps) {
+function FileCard({ file, progress, error, onRemove, onPreview }: FileCardProps) {
   const { t } = useTranslation()
   return (
     <div className="relative flex items-center gap-2.5">
@@ -435,7 +443,7 @@ function FileCard({ file, progress, error, onRemove }: FileCardProps) {
         <div className="flex w-full flex-col gap-2">
           <div className="flex flex-col gap-px">
             <p className="text-foreground/80 line-clamp-1 text-sm font-medium">{file.name}</p>
-            <p className="text-muted-foreground text-xs">{formatBytes(file.size)}</p>
+            <p className="text-muted-foreground text-xs">{formatFileSize(file.size)}</p>
           </div>
           {error ? (
             <div className="text-red-400 text-sm">
@@ -450,6 +458,19 @@ function FileCard({ file, progress, error, onRemove }: FileCardProps) {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        {onPreview ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={onPreview}
+            title={t('documentPanel.uploadDocuments.fileUploader.previewFile')}
+            aria-label={t('documentPanel.uploadDocuments.fileUploader.previewFile')}
+          >
+            <Eye className="size-4" aria-hidden="true" />
+          </Button>
+        ) : null}
         <Button type="button" variant="outline" size="icon" className="size-7" onClick={onRemove}>
           <X className="size-4" aria-hidden="true" />
           <span className="sr-only">{t('documentPanel.uploadDocuments.fileUploader.removeFile')}</span>
@@ -463,13 +484,32 @@ function isFileWithPreview(file: File): file is File & { preview: string } {
   return 'preview' in file && typeof file.preview === 'string'
 }
 
+type PreviewableFile = File & { preview: string }
+
+function toPreviewFile(file: PreviewableFile): PreviewFile {
+  return {
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    preview: file.preview,
+    blob: file
+  }
+}
+
 interface FilePreviewProps {
-  file: File & { preview: string }
+  file: PreviewableFile
 }
 
 function FilePreview({ file }: FilePreviewProps) {
-  if (file.type.startsWith('image/')) {
-    return <div className="aspect-square shrink-0 rounded-md object-cover" />
+  if (getFilePreviewKind(file) === 'image') {
+    return (
+      <img
+        src={file.preview}
+        alt=""
+        aria-hidden="true"
+        className="size-10 shrink-0 rounded-md border object-cover"
+      />
+    )
   }
 
   return <FileText className="text-muted-foreground size-10" aria-hidden="true" />

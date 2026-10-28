@@ -12,6 +12,11 @@ from lightrag.exceptions import (
     AdminWriteHoldExceededError,
     PipelineReservationConflictError,
 )
+from lightrag.fault_tree.views import (
+    GRAPH_VIEW_IDS,
+    GraphViewError,
+    get_graph_view,
+)
 from lightrag.utils import logger
 from ..utils_api import get_combined_auth_dependency, internal_server_error
 from .document_routes import check_pipeline_busy_or_raise
@@ -71,6 +76,34 @@ def _require_nonempty_entity_name(entity_name: str) -> str:
     if not entity_name or not entity_name.strip():
         raise ValueError("Entity name cannot be empty")
     return entity_name.strip()
+
+
+def _graph_node_type(node: dict | None) -> str:
+    """Return the graph class used by the WebUI type badges."""
+    if not isinstance(node, dict):
+        return "Unknown"
+    properties = node.get("properties")
+    source = properties if isinstance(properties, dict) else node
+    raw_type = source.get("class_code") or source.get("entity_type")
+    if not isinstance(raw_type, str) or not raw_type.strip():
+        return "Unknown"
+    return raw_type.strip()
+
+
+async def _label_options(
+    storage, labels: list[str]
+) -> list[dict[str, str | bool]]:
+    """Resolve label types in one backend call, preserving input order."""
+    unique_labels = list(dict.fromkeys(label for label in labels if label))
+    nodes = await storage.get_nodes_batch(unique_labels)
+    return [
+        {
+            "label": label,
+            "type": _graph_node_type(nodes.get(label)),
+            "exists": label in nodes,
+        }
+        for label in labels
+    ]
 
 
 class EntityUpdateRequest(BaseModel):
@@ -211,6 +244,20 @@ class RelationCreateRequest(BaseModel):
         return _require_nonempty_entity_name(entity_name)
 
 
+class LabelDetailsRequest(BaseModel):
+    labels: list[str] = Field(..., min_length=1, max_length=500)
+
+    @field_validator("labels", mode="after")
+    @classmethod
+    def validate_labels(cls, labels: list[str]) -> list[str]:
+        normalized = list(
+            dict.fromkeys(label.strip() for label in labels if label.strip())
+        )
+        if not normalized:
+            raise ValueError("At least one non-empty label is required")
+        return normalized
+
+
 def create_graph_routes(rag, api_key: Optional[str] = None):
     # Fresh router per call. A module-level instance would accumulate
     # duplicate routes when the factory is invoked more than once in the
@@ -240,6 +287,9 @@ def create_graph_routes(rag, api_key: Optional[str] = None):
         limit: int = Query(
             300, description="Maximum number of popular labels to return", ge=1, le=1000
         ),
+        include_types: bool = Query(
+            False, description="Include each label's graph class in the response"
+        ),
     ):
         """
         Get popular labels by node degree (most connected entities)
@@ -251,7 +301,9 @@ def create_graph_routes(rag, api_key: Optional[str] = None):
             List[str]: List of popular labels sorted by degree (highest first)
         """
         try:
-            return await rag.chunk_entity_relation_graph.get_popular_labels(limit)
+            storage = rag.chunk_entity_relation_graph
+            labels = await storage.get_popular_labels(limit)
+            return await _label_options(storage, labels) if include_types else labels
         except Exception as e:
             logger.error(f"Error getting popular labels: {str(e)}")
             logger.error(traceback.format_exc())
@@ -262,6 +314,9 @@ def create_graph_routes(rag, api_key: Optional[str] = None):
         q: str = Query(..., description="Search query string"),
         limit: int = Query(
             50, description="Maximum number of search results to return", ge=1, le=100
+        ),
+        include_types: bool = Query(
+            False, description="Include each label's graph class in the response"
         ),
     ):
         """
@@ -275,9 +330,23 @@ def create_graph_routes(rag, api_key: Optional[str] = None):
             List[str]: List of matching labels sorted by relevance
         """
         try:
-            return await rag.chunk_entity_relation_graph.search_labels(q, limit)
+            storage = rag.chunk_entity_relation_graph
+            labels = await storage.search_labels(q, limit)
+            return await _label_options(storage, labels) if include_types else labels
         except Exception as e:
             logger.error(f"Error searching labels with query '{q}': {str(e)}")
+            logger.error(traceback.format_exc())
+            raise internal_server_error(e)
+
+    @router.post("/graph/label/details", dependencies=[Depends(combined_auth)])
+    async def get_label_details(request: LabelDetailsRequest):
+        """Return graph classes for labels already held in browser history."""
+        try:
+            return await _label_options(
+                rag.chunk_entity_relation_graph, request.labels
+            )
+        except Exception as e:
+            logger.error(f"Error getting label details: {str(e)}")
             logger.error(traceback.format_exc())
             raise internal_server_error(e)
 
@@ -316,6 +385,57 @@ def create_graph_routes(rag, api_key: Optional[str] = None):
             logger.error(f"Error getting knowledge graph for label '{label}': {str(e)}")
             logger.error(traceback.format_exc())
             raise internal_server_error(e)
+
+    @router.get("/graph/views", dependencies=[Depends(combined_auth)])
+    async def list_graph_views():
+        """List the four bounded projections over the current workspace."""
+
+        return {
+            "workspace": getattr(rag, "workspace", "") or "",
+            "views": list(GRAPH_VIEW_IDS),
+        }
+
+    @router.get("/graph/views/{view_id}", dependencies=[Depends(combined_auth)])
+    async def get_bounded_graph_view(
+        view_id: str,
+        root: str | None = Query(
+            None,
+            description=(
+                "Entity name used as the view root. Required for fault-causes; "
+                "optional for the three direct relationship views."
+            ),
+        ),
+        max_depth: int = Query(
+            2,
+            description="Causal expansion depth for fault-causes",
+            ge=1,
+            le=10,
+        ),
+        max_nodes: int = Query(1000, description="Maximum nodes to return", ge=1),
+    ):
+        """Return one ontology-bounded graph projection for this workspace.
+
+        Unlike ``/graphs``, traversal never leaves the relationship set declared
+        by the selected view. In particular, ``equipment-faults`` does not follow
+        fault causality and ``fault-causes`` does not follow equipment or file
+        evidence edges.
+        """
+
+        try:
+            return await get_graph_view(
+                rag,
+                view_id=view_id,
+                root=root,
+                max_depth=max_depth,
+                max_nodes=max_nodes,
+            )
+        except GraphViewError as exc:
+            status_code = 404 if "was not found" in str(exc) else 400
+            raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.error(f"Error getting graph view '{view_id}': {str(exc)}")
+            logger.error(traceback.format_exc())
+            raise internal_server_error(exc)
 
     @router.get("/graph/entity/exists", dependencies=[Depends(combined_auth)])
     async def check_entity_exists(

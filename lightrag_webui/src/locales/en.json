@@ -116,6 +116,16 @@
         "fileTooLarge": "File too large, maximum size is {{maxSize}}",
         "dropHere": "Drop the files here",
         "dragAndDrop": "Drag and drop files here, or click to select files",
+        "previewFile": "Preview file",
+        "previewDescription": "{{size}} · Local preview",
+        "previewImageAlt": "Preview of {{name}}",
+        "previewPdfTitle": "PDF preview for {{name}}",
+        "previewLoading": "Loading preview...",
+        "previewError": "Unable to read this file.",
+        "previewTruncated": "Showing the first {{maxSize}} of this file.",
+        "previewEmptyFile": "This file is empty.",
+        "previewUnavailableTitle": "Preview not available",
+        "previewUnavailableDescription": "This file type cannot be previewed in the browser. You can still upload it.",
         "removeFile": "Remove file",
         "uploadDescription": "You can upload {{isMultiple ? 'multiple' : count}} files (up to {{maxSize}} each)",
         "duplicateFile": "File name already exists in server cache"
@@ -175,6 +185,10 @@
       "hideButton": "Hide",
       "showFileNameTooltip": "Show file name",
       "hideFileNameTooltip": "Hide file name",
+      "preview": {
+        "openTooltip": "Preview source file",
+        "loadFailed": "Failed to load source file\n{{error}}"
+      },
       "details": {
         "title": "Status Details",
         "openTooltip": "View status details",
@@ -210,6 +224,22 @@
     }
   },
   "graphPanel": {
+    "faultDepth": {
+      "root": "Root fault",
+      "level": "Level {{band}} cause",
+      "deeper": "Level {{band}}+ cause"
+    },
+    "graphViews": {
+      "departmentFiles": "Department files",
+      "departmentEquipment": "Department equipment",
+      "equipmentFaults": "Equipment faults",
+      "faultCauses": "Fault causes",
+      "invalidFaultRoot": "\"{{root}}\" is a {{type}} node, not a FaultEvent. Select a fault event in the label search before opening Fault causes.",
+      "invalidFaultRootUnknownType": "\"{{root}}\" is not a FaultEvent and cannot be used as a Fault causes root. Select a fault event in the label search.",
+      "missingFaultRoot": "\"{{root}}\" no longer exists in this graph. Select a fault event from the current label list.",
+      "requestRejected": "Graph view request was rejected ({{status}}). Restart the backend if this route was just added.",
+      "selectFaultHint": "Select a FaultEvent in the label search to use it as the causal-graph root."
+    },
     "dataIsTruncated": "Graph data is truncated to Max Nodes",
     "fetchRetriesExhausted": "Failed to load graph data. Use refresh to try again.",
     "graphBuildFailed": "Failed to render graph data. Use refresh to retry.",
@@ -517,6 +547,35 @@
     "prevPage": "Previous Page",
     "nextPage": "Next Page",
     "lastPage": "Last Page"
+  },
+  "workspaceSwitcher": {
+    "switchButton": "Switch workspace",
+    "loadingWorkspace": "Workspace",
+    "defaultName": "Default workspace",
+    "title": "Workspaces",
+    "description": "Documents, knowledge graphs and retrieval are isolated by workspace.",
+    "searchPlaceholder": "Search workspaces",
+    "newName": "Workspace name",
+    "openWorkspace": "Open workspace {{name}}",
+    "default": "Default",
+    "rename": "Rename",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "createPlaceholder": "New workspace name",
+    "create": "Create",
+    "noMatches": "No matching workspaces",
+    "empty": "No workspaces yet",
+    "deleteTitle": "Delete workspace?",
+    "deleteDescription": "This permanently deletes every document, graph, vector and query index in \"{{name}}\". This cannot be undone.",
+    "deleteConfirm": "Delete workspace",
+    "loadFailed": "Could not load workspaces: {{error}}",
+    "created": "Created workspace \"{{name}}\"",
+    "createFailed": "Could not create workspace: {{error}}",
+    "renamed": "Renamed workspace to \"{{name}}\"",
+    "renameFailed": "Could not rename workspace: {{error}}",
+    "deleted": "Deleted workspace \"{{name}}\"",
+    "deleteFailed": "Could not delete workspace: {{error}}"
   },
   "workspace": {
     "welcome": {

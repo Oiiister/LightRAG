@@ -193,7 +193,7 @@ async def test_every_extract_row_is_referenced_on_the_happy_path():
                 return _extraction_result(key.split("-", 1)[1].upper())
         # The gleaning prompt carries the prior result as history rather than
         # the chunk text, so it is identified by its own template instead.
-        if "last extraction task" in prompt:
+        if "上一次提取任务" in prompt:
             calls.append("gleaning")
             return _extraction_result("GLEANED")
         raise AssertionError(f"unexpected prompt: {prompt[:120]!r}")

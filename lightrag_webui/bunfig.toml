@@ -2,3 +2,4 @@
 # Order matters: the DOM must exist before Testing Library is imported.
 # See the header comment in each file.
 preload = ["./src/test/happydom.ts", "./src/test/setup.ts"]
+pathIgnorePatterns = ["node_modules.partial/**"]

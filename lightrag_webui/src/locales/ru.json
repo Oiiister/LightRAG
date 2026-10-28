@@ -116,6 +116,16 @@
         "fileTooLarge": "Файл слишком большой, максимальный размер {{maxSize}}",
         "dropHere": "Перетащите файлы сюда",
         "dragAndDrop": "Перетащите файлы сюда или нажмите для выбора файлов",
+        "previewFile": "Предпросмотр файла",
+        "previewDescription": "{{size}} · Локальный предпросмотр",
+        "previewImageAlt": "Предпросмотр {{name}}",
+        "previewPdfTitle": "Предпросмотр PDF {{name}}",
+        "previewLoading": "Загрузка предпросмотра...",
+        "previewError": "Не удалось прочитать этот файл.",
+        "previewTruncated": "Показаны только первые {{maxSize}} этого файла.",
+        "previewEmptyFile": "Этот файл пуст.",
+        "previewUnavailableTitle": "Предпросмотр недоступен",
+        "previewUnavailableDescription": "Этот тип файла нельзя просмотреть в браузере, но его можно загрузить.",
         "removeFile": "Удалить файл",
         "uploadDescription": "Вы можете загрузить {{isMultiple ? 'несколько' : count}} файлов (до {{maxSize}} каждый)",
         "duplicateFile": "Имя файла уже существует в кэше сервера"
@@ -175,6 +185,10 @@
       "hideButton": "Скрыть",
       "showFileNameTooltip": "Показать имя файла",
       "hideFileNameTooltip": "Скрыть имя файла",
+      "preview": {
+        "openTooltip": "Предпросмотр исходного файла",
+        "loadFailed": "Не удалось загрузить исходный файл\n{{error}}"
+      },
       "details": {
         "title": "Сведения о статусе",
         "openTooltip": "Показать сведения о статусе",

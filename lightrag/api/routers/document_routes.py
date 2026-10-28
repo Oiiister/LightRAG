@@ -50,6 +50,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from fastapi.responses import FileResponse
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -164,6 +165,56 @@ temp_prefix = "__tmp__"
 UNKNOWN_FILE_SOURCE = "unknown_source"
 LEGACY_EMPTY_FILE_PATH_SENTINELS = {"", "no-file-path"}
 ARCHIVED_FILE_SUFFIX_RE = re.compile(r"_(?:\d{3}|\d{10,})$")
+
+_TEXT_PREVIEW_SUFFIXES = frozenset(
+    {
+        ".bat",
+        ".c",
+        ".conf",
+        ".cpp",
+        ".css",
+        ".csv",
+        ".go",
+        ".h",
+        ".hpp",
+        ".htm",
+        ".html",
+        ".ini",
+        ".java",
+        ".js",
+        ".json",
+        ".less",
+        ".log",
+        ".md",
+        ".mdx",
+        ".php",
+        ".properties",
+        ".py",
+        ".rb",
+        ".rtf",
+        ".scss",
+        ".sh",
+        ".sql",
+        ".swift",
+        ".tex",
+        ".ts",
+        ".txt",
+        ".xml",
+        ".yaml",
+        ".yml",
+    }
+)
+
+_IMAGE_PREVIEW_MEDIA_TYPES = {
+    ".avif": "image/avif",
+    ".bmp": "image/bmp",
+    ".gif": "image/gif",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+}
 
 # ``Retry-After`` hint on an admission 429. Capacity frees up when a document
 # finishes processing, which is a document-scale wait, not a request-scale one —
@@ -2203,6 +2254,56 @@ def canonicalize_archived_file_variant_basename(
         else path.stem
     )
     return normalize_file_path(f"{stem}{path.suffix}")
+
+
+def find_document_source_file(input_dir: Path, file_path: str | None) -> Path | None:
+    """Resolve a document's stored canonical source basename to its current file.
+
+    A processed upload is moved from the workspace input directory into its
+    sibling ``__parsed__`` directory. Search both by the exact canonical
+    basename, and validate every candidate against its containing directory so
+    a symlink or a corrupt ``doc_status`` row cannot escape the workspace.
+
+    Deliberately does not strip numbered archive suffixes: those names do not
+    carry a stable document attribution, and could return another document's
+    source when both ``report.pdf`` and ``report_001.pdf`` exist.
+    """
+    canonical = normalize_file_path(file_path)
+    if canonical == UNKNOWN_FILE_SOURCE:
+        return None
+
+    for candidate_dir in (input_dir, input_dir / PARSED_DIR_NAME):
+        try:
+            candidates = candidate_dir.iterdir()
+            for candidate in candidates:
+                if normalize_file_path(candidate.name) != canonical:
+                    continue
+                safe_candidate = validate_file_path_security(
+                    candidate.name, candidate_dir
+                )
+                if safe_candidate is not None and safe_candidate.is_file():
+                    return safe_candidate
+        except FileNotFoundError:
+            continue
+    return None
+
+
+def document_source_preview_media_type(filename: str) -> str:
+    """Return a safe inline media type for a source-file preview.
+
+    Markup and source files are served as plain text so direct navigation to
+    the preview endpoint cannot execute uploaded HTML/XML. Images and PDFs keep
+    their real media type because the browser needs it to render them inline.
+    """
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".pdf":
+        return "application/pdf"
+    image_media_type = _IMAGE_PREVIEW_MEDIA_TYPES.get(suffix)
+    if image_media_type is not None:
+        return image_media_type
+    if suffix in _TEXT_PREVIEW_SUFFIXES:
+        return "text/plain; charset=utf-8"
+    return "application/octet-stream"
 
 
 def _file_path_for_parsed_artifact_dir(dir_name: str) -> str | None:
@@ -6620,6 +6721,63 @@ def create_document_routes(
             # acquired (or the start helper's backstop already released it).
             if not handed_off:
                 await _release_destructive_busy(rag, destructive_token)
+
+    @router.get(
+        "/{doc_id}/file",
+        dependencies=[Depends(combined_auth)],
+        summary="Preview a processed document's source file.",
+    )
+    async def preview_document_source(doc_id: str) -> FileResponse:
+        """Serve the uploaded source file associated with a document row.
+
+        The document ID is resolved through ``doc_status`` first; callers
+        cannot name an arbitrary file. The file may still be in the workspace
+        input directory while processing, or in its sibling ``__parsed__``
+        directory after processing has moved it.
+        """
+        normalized_doc_id = doc_id.strip()
+        if not normalized_doc_id:
+            raise HTTPException(status_code=400, detail="Document ID cannot be empty")
+
+        try:
+            doc = await rag.doc_status.get_by_id(normalized_doc_id)
+            if doc is None:
+                raise HTTPException(status_code=404, detail="Document not found")
+
+            file_path = doc.get("file_path") if isinstance(doc, dict) else getattr(
+                doc, "file_path", None
+            )
+            source_file = await asyncio.to_thread(
+                find_document_source_file, doc_manager.input_dir, file_path
+            )
+            if source_file is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="The document's source file is no longer available",
+                )
+
+            preview_headers = {
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            }
+            if source_file.suffix.lower() == ".svg":
+                # An uploaded SVG is safe inside an <img>, but direct navigation
+                # must not let its scripts run on the authenticated WebUI origin.
+                preview_headers["Content-Security-Policy"] = (
+                    "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+                )
+
+            return FileResponse(
+                source_file,
+                media_type=document_source_preview_media_type(source_file.name),
+                headers=preview_headers,
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error previewing document source {doc_id}: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise internal_server_error(e)
 
     @router.get(
         "/track_status/{track_id}",

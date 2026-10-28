@@ -38,6 +38,7 @@ const GraphControl = ({ disableHoverEffect }: { disableHoverEffect?: boolean }) 
   const focusedEdge = useGraphStore.use.focusedEdge()
   const sigmaGraph = useGraphStore.use.sigmaGraph()
   const graphEdgeCount = useGraphStore.use.graphEdgeCount()
+  const graphViewId = useGraphStore.use.graphViewId()
 
   // Mirror GraphViewer's gating: above EDGE_PERF_LIMIT the sigma instance is
   // (re)built without the edge picking buffer, so edge events cannot fire even
@@ -84,6 +85,13 @@ const GraphControl = ({ disableHoverEffect }: { disableHoverEffect?: boolean }) 
     }
 
     if (sigmaGraph.order === 0) return
+
+    // fault-causes is a layered DAG. ForceAtlas2 would collapse the depth
+    // bands that the projection assigned, so keep its deterministic layout.
+    if (graphViewId === 'fault-causes') {
+      laidOutGraphRef.current = sigmaGraph
+      return
+    }
 
     // Run the initial layout once PER GRAPH. A theme toggle recreates the sigma
     // instance (settings change -> SigmaContainer rebuild) and re-runs this
@@ -143,7 +151,7 @@ const GraphControl = ({ disableHoverEffect }: { disableHoverEffect?: boolean }) 
       // our own supervisor without disturbing the newer layout.
       useGraphStore.getState().releaseLayoutSupervisor(layout)
     }
-  }, [sigma, sigmaGraph])
+  }, [sigma, sigmaGraph, graphViewId])
 
   /**
    * Ensure the sigma instance is set in the store

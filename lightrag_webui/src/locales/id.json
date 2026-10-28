@@ -116,6 +116,16 @@
         "fileTooLarge": "File terlalu besar, ukuran maksimum {{maxSize}}",
         "dropHere": "Lepaskan file di sini",
         "dragAndDrop": "Seret dan lepas file di sini, atau klik untuk memilih file",
+        "previewFile": "Pratinjau file",
+        "previewDescription": "{{size}} · Pratinjau lokal",
+        "previewImageAlt": "Pratinjau {{name}}",
+        "previewPdfTitle": "Pratinjau PDF {{name}}",
+        "previewLoading": "Memuat pratinjau...",
+        "previewError": "Tidak dapat membaca file ini.",
+        "previewTruncated": "Menampilkan {{maxSize}} pertama dari file ini.",
+        "previewEmptyFile": "File ini kosong.",
+        "previewUnavailableTitle": "Pratinjau tidak tersedia",
+        "previewUnavailableDescription": "Jenis file ini tidak dapat dipratinjau di browser, tetapi tetap dapat diunggah.",
         "removeFile": "Hapus file",
         "uploadDescription": "Anda dapat mengunggah {{isMultiple ? 'multiple' : count}} file (maksimum {{maxSize}} per file)",
         "duplicateFile": "Nama file sudah ada di cache server"
@@ -175,6 +185,10 @@
       "hideButton": "Sembunyikan",
       "showFileNameTooltip": "Tampilkan nama file",
       "hideFileNameTooltip": "Sembunyikan nama file",
+      "preview": {
+        "openTooltip": "Pratinjau file sumber",
+        "loadFailed": "Gagal memuat file sumber\n{{error}}"
+      },
       "details": {
         "title": "Detail Status",
         "openTooltip": "Lihat detail status",

@@ -116,6 +116,16 @@
         "fileTooLarge": "ファイルが大きすぎます。最大サイズは{{maxSize}}です",
         "dropHere": "ファイルをここにドロップ",
         "dragAndDrop": "ファイルをここにドラッグ&ドロップするか、クリックしてファイルを選択",
+        "previewFile": "ファイルをプレビュー",
+        "previewDescription": "{{size}} · ローカルプレビュー",
+        "previewImageAlt": "{{name}} のプレビュー",
+        "previewPdfTitle": "{{name}} の PDF プレビュー",
+        "previewLoading": "プレビューを読み込み中...",
+        "previewError": "このファイルを読み取れません。",
+        "previewTruncated": "ファイルの先頭 {{maxSize}} のみを表示しています。",
+        "previewEmptyFile": "このファイルは空です。",
+        "previewUnavailableTitle": "プレビューできません",
+        "previewUnavailableDescription": "このファイル形式はブラウザでプレビューできませんが、アップロードは可能です。",
         "removeFile": "ファイルを削除",
         "uploadDescription": "{{isMultiple ? '複数' : count}}個のファイルをアップロードできます（それぞれ最大{{maxSize}}まで）",
         "duplicateFile": "ファイル名がサーバーキャッシュに既に存在します"
@@ -175,6 +185,10 @@
       "hideButton": "非表示",
       "showFileNameTooltip": "ファイル名を表示",
       "hideFileNameTooltip": "ファイル名を非表示",
+      "preview": {
+        "openTooltip": "元のファイルをプレビュー",
+        "loadFailed": "元のファイルを読み込めませんでした\n{{error}}"
+      },
       "details": {
         "title": "ステータス詳細",
         "openTooltip": "ステータス詳細を表示",

@@ -116,6 +116,16 @@
         "fileTooLarge": "حجم الملف كبير جدًا، الحد الأقصى {{maxSize}}",
         "dropHere": "أفلت الملفات هنا",
         "dragAndDrop": "اسحب وأفلت الملفات هنا، أو انقر للاختيار",
+        "previewFile": "معاينة الملف",
+        "previewDescription": "{{size}} · معاينة محلية",
+        "previewImageAlt": "معاينة {{name}}",
+        "previewPdfTitle": "معاينة PDF لـ {{name}}",
+        "previewLoading": "جارٍ تحميل المعاينة...",
+        "previewError": "تعذر قراءة هذا الملف.",
+        "previewTruncated": "يتم عرض أول {{maxSize}} من هذا الملف فقط.",
+        "previewEmptyFile": "هذا الملف فارغ.",
+        "previewUnavailableTitle": "المعاينة غير متاحة",
+        "previewUnavailableDescription": "لا يمكن معاينة هذا النوع من الملفات في المتصفح، ولكن يمكنك رفعه.",
         "removeFile": "إزالة الملف",
         "uploadDescription": "يمكنك رفع {{isMultiple ? 'عدة' : count}} ملفات (حتى {{maxSize}} لكل منها)",
         "duplicateFile": "اسم الملف موجود بالفعل في ذاكرة التخزين المؤقت للخادم"
@@ -175,6 +185,10 @@
       "hideButton": "إخفاء",
       "showFileNameTooltip": "عرض اسم الملف",
       "hideFileNameTooltip": "إخفاء اسم الملف",
+      "preview": {
+        "openTooltip": "معاينة الملف الأصلي",
+        "loadFailed": "تعذر تحميل الملف الأصلي\n{{error}}"
+      },
       "details": {
         "title": "تفاصيل الحالة",
         "openTooltip": "عرض تفاصيل الحالة",

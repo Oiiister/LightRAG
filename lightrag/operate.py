@@ -76,6 +76,10 @@ from lightrag.chunk_schema import (
     format_parent_headings,
     strip_internal_multimodal_markup_for_extraction,
 )
+from lightrag.fault_tree.persistence import (
+    entity_storage_fields,
+    relation_storage_fields,
+)
 from lightrag.prompt import PROMPTS, resolve_entity_extraction_prompt_profile
 from lightrag.constants import (
     GRAPH_FIELD_SEP,
@@ -1012,6 +1016,13 @@ async def _process_json_extraction_result(
                 file_path=file_path,
                 timestamp=timestamp,
             )
+            fault_payload = _build_fault_entity_payload(entity_data)
+            if fault_payload:
+                node_data["_fault_payload"] = json.dumps(
+                    fault_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
             maybe_nodes[truncated_name].append(node_data)
 
         except Exception as e:
@@ -1088,6 +1099,13 @@ async def _process_json_extraction_result(
                 file_path=file_path,
                 timestamp=timestamp,
             )
+            fault_payload = _build_fault_relation_payload(rel_data)
+            if fault_payload:
+                edge_data["_fault_payload"] = json.dumps(
+                    fault_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
             maybe_edges[(truncated_source, truncated_target)].append(edge_data)
 
         except Exception as e:
@@ -1097,6 +1115,64 @@ async def _process_json_extraction_result(
             continue
 
     return dict(maybe_nodes), dict(maybe_edges)
+
+
+def _build_fault_entity_payload(entity_data: dict[str, Any]) -> dict[str, Any]:
+    """Preserve optional fault-domain fields emitted by a domain profile.
+
+    The payload stays a JSON string on the internal candidate record so every
+    graph backend still receives only scalar attributes. The domain validator
+    consumes and validates it before graph ingestion.
+    """
+
+    class_code = entity_data.get("class") or entity_data.get("type")
+    payload: dict[str, Any] = {}
+    if isinstance(class_code, str) and class_code.strip():
+        payload["class"] = class_code.strip()
+
+    for key in (
+        "local_id",
+        "uid",
+        "name",
+        "canonical_name",
+        "description",
+        "aliases",
+        "properties",
+        "cause_rule",
+        "evidence",
+        "equipment_tag",
+        "equipment_type",
+        "functional_location",
+        "manufacturer",
+        "model",
+        "serial_number",
+        "symptoms",
+        "maintenance_measures",
+        "severity",
+        "fault_category",
+    ):
+        if key in entity_data:
+            payload[key] = entity_data[key]
+    return payload
+
+
+def _build_fault_relation_payload(rel_data: dict[str, Any]) -> dict[str, Any]:
+    """Preserve optional fault-domain fields emitted on a relationship."""
+
+    payload: dict[str, Any] = {}
+    for key in (
+        "local_id",
+        "relation_code",
+        "source",
+        "target",
+        "gate_type_hint",
+        "gate_key",
+        "evidence",
+        "model_confidence",
+    ):
+        if key in rel_data:
+            payload[key] = rel_data[key]
+    return payload
 
 
 async def rebuild_knowledge_from_chunks(
@@ -2725,6 +2801,7 @@ async def _merge_nodes_then_upsert(
             logger.debug(status_message)
 
         # 11. Update both graph and vector db
+        domain_fields = entity_storage_fields(nodes_data, existing=already_node)
         node_data = dict(
             entity_id=entity_name,
             entity_type=entity_type,
@@ -2733,6 +2810,7 @@ async def _merge_nodes_then_upsert(
             file_path=file_path,
             created_at=int(time.time()),
             truncate=truncation_info,
+            **domain_fields,
         )
 
         # Construct and verify the VDB payload BEFORE the first graph
@@ -3384,6 +3462,7 @@ async def _merge_edges_then_upsert(
         # non-retryable content-shape problem), nothing has been written
         # yet. The actual VDB I/O calls still happen after the graph write
         # below.
+        relation_fields = relation_storage_fields(edges_data, existing=already_edge)
         vdb_data = None
         if relationships_vdb is not None:
             rel_vdb_id = compute_mdhash_id(vdb_src_id + vdb_tgt_id, prefix="rel-")
@@ -3420,6 +3499,7 @@ async def _merge_edges_then_upsert(
                 file_path=file_path,
                 created_at=edge_created_at,
                 truncate=truncation_info,
+                **relation_fields,
             ),
         )
         edge_upsert_elapsed = time.perf_counter() - edge_upsert_started
@@ -3440,6 +3520,7 @@ async def _merge_edges_then_upsert(
             created_at=edge_created_at,
             truncate=truncation_info,
             weight=weight,
+            **relation_fields,
         )
 
         if relationships_vdb is not None:
@@ -4030,6 +4111,9 @@ async def extract_entities(
             language=language,
             max_total_records=max_total_records,
             max_entity_records=max_entity_records,
+            domain_extraction_rules=prompt_profile.get(
+                "domain_extraction_rules", ""
+            ),
         )
     else:
         # Text mode: use traditional delimiter-based prompts
@@ -4051,6 +4135,9 @@ async def extract_entities(
             language=language,
             max_total_records=max_total_records,
             max_entity_records=max_entity_records,
+            domain_extraction_rules=prompt_profile.get(
+                "domain_extraction_rules", ""
+            ),
         )
 
     # The system prompt (and, in JSON mode, the continue prompt) is built

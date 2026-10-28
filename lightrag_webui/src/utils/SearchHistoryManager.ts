@@ -158,6 +158,49 @@ export class SearchHistoryManager {
   }
 
   /**
+   * Replace stale popular recommendations while preserving real user searches.
+   *
+   * The graph can gain labels while the graph tab is unmounted (for example
+   * after uploading from the Documents tab). Re-running merge on mount picks
+   * those labels up without wiping the user's recent searches.
+   */
+  static mergePopularLabels(popularLabels: string[]): void {
+    try {
+      const history = this.getHistory()
+      const recent = history.filter((item) => item.accessCount > 0)
+      const recentLabels = new Set(recent.map((item) => item.label))
+      const recommendations = Array.from(
+        new Set(
+          popularLabels
+            .map((label) => label.trim())
+            .filter((label) => label && !recentLabels.has(label))
+        )
+      )
+      const now = Date.now()
+      const oldestRecent =
+        recent.length > 0
+          ? Math.min(...recent.map((item) => item.lastAccessed))
+          : now + recommendations.length
+      const items: SearchHistoryItem[] = [
+        ...recent,
+        ...recommendations.map((label, index) => ({
+          label,
+          lastAccessed: oldestRecent - index - 1,
+          accessCount: 0
+        }))
+      ].slice(0, this.MAX_HISTORY)
+
+      const data: SearchHistoryData = {
+        items,
+        version: this.VERSION
+      }
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data))
+    } catch (error) {
+      console.error('Error merging popular labels into search history:', error)
+    }
+  }
+
+  /**
    * Get recent searches (items with accessCount > 0)
    * @param limit Maximum number of recent searches to return
    * @returns Array of recent search items

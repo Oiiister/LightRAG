@@ -116,6 +116,16 @@
         "fileTooLarge": "파일이 너무 큽니다. 최대 크기는 {{maxSize}}입니다",
         "dropHere": "여기에 파일을 놓으세요",
         "dragAndDrop": "여기에 파일을 드래그 앤 드롭하거나 클릭하여 선택하세요",
+        "previewFile": "파일 미리보기",
+        "previewDescription": "{{size}} · 로컬 미리보기",
+        "previewImageAlt": "{{name}} 미리보기",
+        "previewPdfTitle": "{{name}} PDF 미리보기",
+        "previewLoading": "미리보기를 불러오는 중...",
+        "previewError": "이 파일을 읽을 수 없습니다.",
+        "previewTruncated": "이 파일의 처음 {{maxSize}}만 표시합니다.",
+        "previewEmptyFile": "이 파일은 비어 있습니다.",
+        "previewUnavailableTitle": "미리보기를 사용할 수 없음",
+        "previewUnavailableDescription": "브라우저에서 이 파일 형식을 미리 볼 수 없지만 업로드는 계속할 수 있습니다.",
         "removeFile": "파일 제거",
         "uploadDescription": "{{isMultiple ? '여러' : count}}개의 파일을 업로드할 수 있습니다 (각 최대 {{maxSize}})",
         "duplicateFile": "파일 이름이 서버 캐시에 이미 존재합니다"
@@ -175,6 +185,10 @@
       "hideButton": "숨기기",
       "showFileNameTooltip": "파일명 표시",
       "hideFileNameTooltip": "파일명 숨기기",
+      "preview": {
+        "openTooltip": "원본 파일 미리보기",
+        "loadFailed": "원본 파일을 불러오지 못했습니다\n{{error}}"
+      },
       "details": {
         "title": "상태 상세",
         "openTooltip": "상태 상세 보기",

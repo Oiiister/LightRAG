@@ -116,6 +116,16 @@
         "fileTooLarge": "Datei zu groß, maximale Größe ist {{maxSize}}",
         "dropHere": "Dateien hier ablegen",
         "dragAndDrop": "Dateien hierher ziehen oder klicken, um Dateien auszuwählen",
+        "previewFile": "Datei anzeigen",
+        "previewDescription": "{{size}} · Lokale Vorschau",
+        "previewImageAlt": "Vorschau von {{name}}",
+        "previewPdfTitle": "PDF-Vorschau für {{name}}",
+        "previewLoading": "Vorschau wird geladen...",
+        "previewError": "Diese Datei kann nicht gelesen werden.",
+        "previewTruncated": "Es werden nur die ersten {{maxSize}} dieser Datei angezeigt.",
+        "previewEmptyFile": "Diese Datei ist leer.",
+        "previewUnavailableTitle": "Vorschau nicht verfügbar",
+        "previewUnavailableDescription": "Dieser Dateityp kann im Browser nicht angezeigt werden. Der Upload ist weiterhin möglich.",
         "removeFile": "Datei entfernen",
         "uploadDescription": "Sie können {{isMultiple ? 'mehrere' : count}} Dateien hochladen (bis zu {{maxSize}} pro Datei)",
         "duplicateFile": "Dateiname existiert bereits im Server-Cache"
@@ -175,6 +185,10 @@
       "hideButton": "Ausblenden",
       "showFileNameTooltip": "Dateiname anzeigen",
       "hideFileNameTooltip": "Dateiname ausblenden",
+      "preview": {
+        "openTooltip": "Originaldatei anzeigen",
+        "loadFailed": "Originaldatei konnte nicht geladen werden\n{{error}}"
+      },
       "details": {
         "title": "Statusdetails",
         "openTooltip": "Statusdetails anzeigen",

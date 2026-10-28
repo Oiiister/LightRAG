@@ -116,6 +116,16 @@
         "fileTooLarge": "Файл занадто великий, максимальний розмір {{maxSize}}",
         "dropHere": "Перетягніть файли сюди",
         "dragAndDrop": "Перетягніть файли сюди або натисніть для вибору файлів",
+        "previewFile": "Попередній перегляд файлу",
+        "previewDescription": "{{size}} · Локальний перегляд",
+        "previewImageAlt": "Попередній перегляд {{name}}",
+        "previewPdfTitle": "Попередній перегляд PDF {{name}}",
+        "previewLoading": "Завантаження попереднього перегляду...",
+        "previewError": "Не вдалося прочитати цей файл.",
+        "previewTruncated": "Показано лише перші {{maxSize}} цього файлу.",
+        "previewEmptyFile": "Цей файл порожній.",
+        "previewUnavailableTitle": "Попередній перегляд недоступний",
+        "previewUnavailableDescription": "Цей тип файлу не можна переглянути в браузері, але його можна завантажити.",
         "removeFile": "Видалити файл",
         "uploadDescription": "Ви можете завантажити {{isMultiple ? 'кілька' : count}} файлів (до {{maxSize}} кожен)",
         "duplicateFile": "Ім'я файлу вже існує в кеші сервера"
@@ -175,6 +185,10 @@
       "hideButton": "Приховати",
       "showFileNameTooltip": "Показати ім'я файлу",
       "hideFileNameTooltip": "Приховати ім'я файлу",
+      "preview": {
+        "openTooltip": "Попередній перегляд вихідного файлу",
+        "loadFailed": "Не вдалося завантажити вихідний файл\n{{error}}"
+      },
       "details": {
         "title": "Відомості про статус",
         "openTooltip": "Показати відомості про статус",

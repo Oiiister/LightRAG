@@ -22,5 +22,6 @@ export const storageKey = (name: string): string => `lightrag:${STORAGE_NS}:${na
 export const QUERY_SETTINGS_STORAGE_KEY = storageKey('query-settings-storage')
 export const WEBUI_RETRIEVAL_HISTORY_KEY = storageKey('webui-retrieval-history')
 export const WORKSPACE_RETRIEVAL_HISTORY_KEY = storageKey('workspace-retrieval-history')
+export const ACTIVE_WORKSPACE_STORAGE_KEY = storageKey('active-workspace')
 
 export const LEGACY_SETTINGS_STORAGE_KEY = 'settings-storage'

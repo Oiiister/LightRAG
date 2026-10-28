@@ -3,6 +3,7 @@ import { createSelectors } from '@/lib/utils'
 import { DirectedGraph } from 'graphology'
 import MiniSearch from 'minisearch'
 import { resolveNodeColor, DEFAULT_NODE_COLOR } from '@/utils/graphColor'
+import type { GraphViewId } from '@/api/lightrag'
 
 // Minimal imperative handle the store needs to own a running layout: enough to
 // terminate the previous one before a new layout takes over.
@@ -91,6 +92,9 @@ export class RawGraph {
 }
 
 interface GraphState {
+  graphViewId: GraphViewId
+  setGraphViewId: (viewId: GraphViewId) => void
+
   selectedNode: string | null
   focusedNode: string | null
   selectedEdge: string | null
@@ -190,6 +194,9 @@ interface GraphState {
 }
 
 const useGraphStoreBase = create<GraphState>()((set, get) => ({
+  graphViewId: 'department-files',
+  setGraphViewId: (graphViewId) => set({ graphViewId }),
+
   selectedNode: null,
   focusedNode: null,
   selectedEdge: null,

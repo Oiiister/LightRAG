@@ -9,7 +9,7 @@
 
 import { navigationService } from '@/services/navigation'
 import { useGraphStore } from '@/stores/graph'
-import { useWebuiRetrievalHistoryStore } from '@/stores/webuiRetrievalHistory'
+import { clearAllWebuiRetrievalHistories } from '@/stores/webuiRetrievalHistory'
 import { watchCrossTabIdentityChanges } from '@/lib/loginIdentity'
 
 function resetGraphState() {
@@ -31,8 +31,7 @@ function resetGraphState() {
 navigationService.configureEntry({
   unauthenticatedRoute: '/login',
   resetAdapters: [resetGraphState],
-  clearRetrievalHistory: () =>
-    useWebuiRetrievalHistoryStore.getState().clearHistory()
+  clearRetrievalHistory: () => clearAllWebuiRetrievalHistories()
 })
 
 // Another tab switching identity must also reset THIS tab's live retrieval

@@ -1,4 +1,4 @@
-import { create, type UseBoundStore, type StoreApi } from 'zustand'
+import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { toast } from 'sonner'
 import i18n from '@/i18n'
@@ -28,7 +28,22 @@ export interface RetrievalHistoryState {
   clearHistory: () => void
 }
 
-export type RetrievalHistoryStore = UseBoundStore<StoreApi<RetrievalHistoryState>>
+export type RetrievalHistoryStore = {
+  getState: () => RetrievalHistoryState
+  setState: (
+    partial:
+      | RetrievalHistoryState
+      | Partial<RetrievalHistoryState>
+      | ((state: RetrievalHistoryState) => Partial<RetrievalHistoryState>),
+    replace?: boolean
+  ) => void
+  subscribe: (
+    listener: (
+      state: RetrievalHistoryState,
+      previousState: RetrievalHistoryState
+    ) => void
+  ) => () => void
+}
 
 // One warning per key per session is enough — the condition repeats on every
 // persisted write until the conversation is cleared.
@@ -89,7 +104,9 @@ function createBoundedHistoryStorage() {
   }
 }
 
-export function createRetrievalHistoryStore(storageKey: string): RetrievalHistoryStore {
+export function createRetrievalHistoryStore(
+  storageKey: string
+): RetrievalHistoryStore {
   return create<RetrievalHistoryState>()(
     persist(
       (set) => ({
@@ -122,5 +139,5 @@ export function createRetrievalHistoryStore(storageKey: string): RetrievalHistor
         }
       }
     )
-  )
+  ) as RetrievalHistoryStore
 }

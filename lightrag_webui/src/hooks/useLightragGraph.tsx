@@ -5,11 +5,24 @@ import { errorMessage } from '@/lib/utils'
 import * as Constants from '@/lib/constants'
 import { useGraphStore, RawGraph, RawNodeType, RawEdgeType } from '@/stores/graph'
 import { toast } from 'sonner'
-import { queryGraphs } from '@/api/lightrag'
+import {
+  queryGraphView,
+  type GraphViewId,
+  type HttpRequestError
+} from '@/api/lightrag'
 import { useBackendState } from '@/stores/state'
 import { useSettingsStore } from '@/stores/settings'
 
 import { resolveNodeColor, DEFAULT_NODE_COLOR } from '@/utils/graphColor'
+import { resolveFaultDepthStyle } from '@/utils/faultDepthStyle'
+import { resolveNodeType } from '@/utils/nodeType'
+import { formatGraphLabel } from '@/utils/graphLabel'
+import {
+  canLoadGraphView,
+  isInvalidFaultRootResponse,
+  isMissingFaultRootResponse,
+  resolveGraphViewRoot
+} from '@/utils/graphViewSelection'
 import { hasEdgeSafe, addUndirectedEdgeSafe } from '@/utils/graphEdgeSafety'
 
 // Every node gets this border (the node-border program reads `borderColor`).
@@ -129,7 +142,7 @@ const parseEdgeWeight = (properties: Record<string, unknown> | undefined): numbe
 // `labels` array must not throw (labels.join) and abort the whole graph build
 // — fall back to the node id so the rest of the graph still renders.
 const safeNodeLabel = (labels: unknown, fallbackId: string): string =>
-  Array.isArray(labels) ? labels.join(', ') : fallbackId
+  formatGraphLabel(Array.isArray(labels) ? labels.join(', ') : fallbackId)
 
 export type NodeType = {
   x: number
@@ -137,6 +150,7 @@ export type NodeType = {
   label: string
   size: number
   color: string
+  viewDepth?: number
   highlighted?: boolean
 }
 export type EdgeType = {
@@ -147,19 +161,25 @@ export type EdgeType = {
   hidden?: boolean
 }
 
-const fetchGraph = async (label: string, maxDepth: number, maxNodes: number) => {
+const fetchGraph = async (
+  viewId: GraphViewId,
+  label: string,
+  maxDepth: number,
+  maxNodes: number
+) => {
   let rawData: any
 
   // Trigger GraphLabels component to check if the label is valid
   // console.log('Setting labelsFetchAttempted to true');
   useGraphStore.getState().setLabelsFetchAttempted(true)
 
-  // If label is empty, use default label '*'
-  const queryLabel = label || '*'
+  const queryRoot = resolveGraphViewRoot(viewId, label)
 
   try {
-    console.log(`Fetching graph label: ${queryLabel}, depth: ${maxDepth}, nodes: ${maxNodes}`)
-    rawData = await queryGraphs(queryLabel, maxDepth, maxNodes)
+    console.log(
+      `Fetching graph view: ${viewId}, root: ${queryRoot || '*'}, depth: ${maxDepth}, nodes: ${maxNodes}`
+    )
+    rawData = await queryGraphView(viewId, queryRoot, maxDepth, maxNodes)
   } catch (e) {
     // Record the backend error, then RETHROW so the caller's .catch() runs its
     // bounded-retry path. Returning null here would resolve the promise
@@ -250,6 +270,7 @@ const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGr
 
   const graph = new UndirectedGraph()
   const typeColors = createTypeColorResolver()
+  const graphViewId = useGraphStore.getState().graphViewId
   let sliceStart = performance.now()
 
   const nodes = rawGraph.nodes
@@ -265,7 +286,19 @@ const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGr
     if (graph.hasNode(rawNode.id)) continue
 
     const { x, y } = hashNodeIdToPosition(rawNode.id)
-    rawNode.color = typeColors.colorFor(rawNode.properties?.entity_type)
+    const faultStyle =
+      graphViewId === 'fault-causes'
+        ? resolveFaultDepthStyle(
+          rawNode.properties?.entity_type,
+          rawNode.properties?._view_depth
+        )
+        : null
+    rawNode.color =
+      faultStyle?.color ||
+      typeColors.colorFor(rawNode.properties?.entity_type)
+    if (faultStyle) {
+      rawNode.size = faultStyle.size
+    }
 
     graph.addNode(rawNode.id, {
       label: safeNodeLabel(rawNode.labels, rawNode.id),
@@ -273,7 +306,8 @@ const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGr
       x,
       y,
       size: rawNode.size,
-      borderColor: NODE_BORDER_COLOR
+      borderColor: NODE_BORDER_COLOR,
+      viewDepth: Number(rawNode.properties?._view_depth ?? 0)
     })
   }
 
@@ -306,7 +340,14 @@ const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGr
     // every edge); the human-readable relation name is properties.keywords.
     // originalWeight feeds GraphControl's thickness scaling.
     const attributes = {
-      label: (rawEdge.properties?.keywords as string | undefined) || undefined,
+      label:
+        (rawEdge.properties?.relation_code as string | undefined) ||
+        (rawEdge.properties?.keywords as string | undefined) ||
+        undefined,
+      type:
+        useGraphStore.getState().graphViewId === 'fault-causes'
+          ? 'curvedArrow'
+          : undefined,
       originalWeight: parseEdgeWeight(rawEdge.properties)
     }
     const dynamicId = addUndirectedEdgeSafe(graph, rawEdge.source, rawEdge.target, attributes)
@@ -322,7 +363,30 @@ const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGr
     console.warn(`[useLightragGraph] ${skippedEdges} edges could not be added to the graph`)
   }
 
+  if (graphViewId === 'fault-causes') {
+    applyCausalLayeredPositions(graph)
+  }
+
   return graph
+}
+
+const applyCausalLayeredPositions = (graph: UndirectedGraph): void => {
+  const byDepth = new Map<number, string[]>()
+  graph.forEachNode((node) => {
+    const depth = Number(graph.getNodeAttribute(node, 'viewDepth') ?? 0)
+    const level = Number.isFinite(depth) ? Math.max(0, depth) : 0
+    const nodes = byDepth.get(level) || []
+    nodes.push(node)
+    byDepth.set(level, nodes)
+  })
+  for (const [depth, nodes] of byDepth.entries()) {
+    nodes.sort()
+    const span = Math.max(1, nodes.length - 1)
+    nodes.forEach((node, index) => {
+      graph.setNodeAttribute(node, 'x', (index - span / 2) * 6)
+      graph.setNodeAttribute(node, 'y', -depth * 6)
+    })
+  }
 }
 
 const useLightrangeGraph = () => {
@@ -336,6 +400,8 @@ const useLightrangeGraph = () => {
   const nodeToExpand = useGraphStore.use.nodeToExpand()
   const nodeToPrune = useGraphStore.use.nodeToPrune()
   const graphDataVersion = useGraphStore.use.graphDataVersion()
+  const graphViewId = useGraphStore.use.graphViewId()
+  const viewRequiresRoot = graphViewId === 'fault-causes'
 
   // Use ref to track if data has been loaded and initial load
   const dataLoadedRef = useRef(false)
@@ -379,9 +445,19 @@ const useLightrangeGraph = () => {
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [retryNonce, setRetryNonce] = useState(0)
 
+  useEffect(() => {
+    emptyDataHandledRef.current = false
+    dataLoadedRef.current = false
+    initialLoadRef.current = false
+  }, [graphViewId])
+
   // Reset graph when query label is cleared
   useEffect(() => {
-    if (!queryLabel && (rawGraph !== null || sigmaGraph !== null)) {
+    if (
+      viewRequiresRoot &&
+      !queryLabel &&
+      (rawGraph !== null || sigmaGraph !== null)
+    ) {
       const state = useGraphStore.getState()
       state.reset()
       state.setGraphDataFetchAttempted(false)
@@ -389,7 +465,7 @@ const useLightrangeGraph = () => {
       dataLoadedRef.current = false
       initialLoadRef.current = false
     }
-  }, [queryLabel, rawGraph, sigmaGraph])
+  }, [queryLabel, rawGraph, sigmaGraph, viewRequiresRoot])
 
   // Graph data fetching logic
   useEffect(() => {
@@ -399,7 +475,7 @@ const useLightrangeGraph = () => {
     }
 
     // Empty queryLabel should be only handle once(avoid infinite loop)
-    if (!queryLabel && emptyDataHandledRef.current) {
+    if (viewRequiresRoot && !queryLabel && emptyDataHandledRef.current) {
       return
     }
 
@@ -412,7 +488,7 @@ const useLightrangeGraph = () => {
       // with an identical signature, some code path reset
       // graphDataFetchAttempted after a completed fetch — refetching would
       // start an infinite request loop against the backend.
-      const fetchSignature = `${queryLabel}|${maxQueryDepth}|${maxNodes}|v${graphDataVersion}`
+      const fetchSignature = `${graphViewId}|${queryLabel}|${maxQueryDepth}|${maxNodes}|v${graphDataVersion}`
       if (lastFetchSignatureRef.current === fetchSignature) {
         console.warn(
           '[useLightragGraph] Suppressed duplicate graph fetch:',
@@ -456,6 +532,11 @@ const useLightrangeGraph = () => {
       const currentQueryLabel = queryLabel
       const currentMaxQueryDepth = maxQueryDepth
       const currentMaxNodes = maxNodes
+      const currentViewId = graphViewId
+      const canLoadCurrentView = canLoadGraphView(
+        currentViewId,
+        currentQueryLabel
+      )
 
       // Declare a variable to store data promise
       let dataPromise: Promise<{
@@ -463,9 +544,14 @@ const useLightrangeGraph = () => {
         is_truncated: boolean | undefined
       } | null>
 
-      // 1. If query label is not empty, use fetchGraph
-      if (currentQueryLabel) {
-        dataPromise = fetchGraph(currentQueryLabel, currentMaxQueryDepth, currentMaxNodes)
+      // `*` is the "all labels" sentinel, not a valid fault-causes root.
+      if (canLoadCurrentView) {
+        dataPromise = fetchGraph(
+          currentViewId,
+          currentQueryLabel,
+          currentMaxQueryDepth,
+          currentMaxNodes
+        )
       } else {
         // 2. If query label is empty, set data to null
         console.log('Query label is empty, show empty graph')
@@ -596,6 +682,59 @@ const useLightrangeGraph = () => {
           fetchInProgressRef.current = false
           state.setLastSuccessfulQueryLabel('') // Clear last successful query label on error
 
+          const status = (error as HttpRequestError | undefined)?.status
+          if (typeof status === 'number' && status >= 400 && status < 500) {
+            lastFetchSignatureRef.current = fetchSignature
+            retryStateRef.current = { signature: '', attempts: 0 }
+            if (
+              currentViewId === 'fault-causes' &&
+              isInvalidFaultRootResponse(
+                status,
+                errorMessage(error)
+              )
+            ) {
+              const rootNode = state.rawGraph?.nodes.find(
+                (node) =>
+                  node.id === currentQueryLabel ||
+                  node.properties?.entity_id === currentQueryLabel
+              )
+              const rootType = rootNode
+                ? resolveNodeType(rootNode.properties)
+                : null
+              toast.error(
+                rootType
+                  ? t('graphPanel.graphViews.invalidFaultRoot', {
+                    root: currentQueryLabel,
+                    type: rootType
+                  })
+                  : t(
+                    'graphPanel.graphViews.invalidFaultRootUnknownType',
+                    { root: currentQueryLabel }
+                  )
+              )
+              return
+            }
+            if (
+              currentViewId === 'fault-causes' &&
+              isMissingFaultRootResponse(status, errorMessage(error))
+            ) {
+              toast.error(
+                t('graphPanel.graphViews.missingFaultRoot', {
+                  root: currentQueryLabel
+                })
+              )
+              return
+            }
+            toast.error(
+              t(
+                'graphPanel.graphViews.requestRejected',
+                'Graph view request was rejected ({{status}}). Restart the backend if this route was just added.',
+                { status }
+              )
+            )
+            return
+          }
+
           // Terminal failure: the network fetch succeeded but building/applying
           // the graph failed. This is deterministic, so do NOT retry (that would
           // re-fetch identical data and fail identically). Stamp the signature
@@ -661,7 +800,17 @@ const useLightrangeGraph = () => {
           }
         })
     }
-  }, [queryLabel, maxQueryDepth, maxNodes, isFetching, t, graphDataVersion, retryNonce])
+  }, [
+    queryLabel,
+    maxQueryDepth,
+    maxNodes,
+    isFetching,
+    t,
+    graphDataVersion,
+    retryNonce,
+    graphViewId,
+    viewRequiresRoot
+  ])
 
   // Clean up any pending backoff retry timer on unmount.
   useEffect(() => {
@@ -698,7 +847,12 @@ const useLightrangeGraph = () => {
         }
 
         // Fetch the extended subgraph with depth 2
-        const extendedGraph = await queryGraphs(label, 2, 1000)
+        const extendedGraph = await queryGraphView(
+          useGraphStore.getState().graphViewId,
+          label,
+          2,
+          1000
+        )
 
         if (!extendedGraph || !extendedGraph.nodes || !extendedGraph.edges) {
           console.error('Failed to fetch extended graph')
@@ -951,9 +1105,18 @@ const useLightrangeGraph = () => {
           // Calculate node size
           // Limit nodeDegree to maxDegree + 1 to prevent new nodes from being too large
           const limitedDegree = Math.min(nodeDegree, maxDegree + 1)
-          const nodeSize = Math.round(
-            Constants.minNodeSize + scale * Math.pow((limitedDegree - minDegree) / range, 0.5)
+          const degreeSize = Math.round(
+            Constants.minNodeSize +
+              scale * Math.pow((limitedDegree - minDegree) / range, 0.5)
           )
+          const faultStyle =
+            useGraphStore.getState().graphViewId === 'fault-causes'
+              ? resolveFaultDepthStyle(
+                newNode.properties?.entity_type,
+                newNode.properties?._view_depth
+              )
+              : null
+          const nodeSize = faultStyle?.size || degreeSize
 
           // Calculate angle for polar coordinates
           const angle = 2 * Math.PI * (newNodeIdx / nodesToAddList.length)
@@ -969,11 +1132,12 @@ const useLightrangeGraph = () => {
           // Add the new node to the sigma graph with calculated position
           sigmaGraph.addNode(nodeId, {
             label: safeNodeLabel(newNode.labels, nodeId),
-            color: newNode.color,
+            color: faultStyle?.color || newNode.color,
             x: x,
             y: y,
             size: nodeSize,
-            borderColor: NODE_BORDER_COLOR
+            borderColor: NODE_BORDER_COLOR,
+            viewDepth: Number(newNode.properties?._view_depth ?? 0)
           })
 
           // Add the node to the raw graph

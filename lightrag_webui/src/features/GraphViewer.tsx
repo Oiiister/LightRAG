@@ -26,6 +26,7 @@ import PropertiesView from '@/components/graph/PropertiesView'
 import SettingsDisplay from '@/components/graph/SettingsDisplay'
 import Legend from '@/components/graph/Legend'
 import LegendButton from '@/components/graph/LegendButton'
+import GraphViewSelector from '@/components/graph/GraphViewSelector'
 
 import { useSettingsStore } from '@/stores/settings'
 import { useGraphStore } from '@/stores/graph'
@@ -264,15 +265,20 @@ const GraphViewer = () => {
 
         <FocusOnNode node={autoFocusedNode} move={moveToSelectedNode} />
 
-        <div className="absolute top-2 left-2 flex items-start gap-2">
-          <GraphLabels />
-          {showNodeSearchBar && !isThemeSwitching && (
-            <GraphSearch
-              value={searchInitSelectedNode}
-              onFocus={onSearchFocus}
-              onChange={onSearchSelect}
-            />
-          )}
+        <div className="pointer-events-none absolute inset-x-2 top-2 z-20 flex flex-wrap items-start justify-between gap-2">
+          <div className="pointer-events-auto flex min-w-0 max-w-full flex-wrap items-start gap-2">
+            <GraphLabels />
+            {showNodeSearchBar && !isThemeSwitching && (
+              <GraphSearch
+                value={searchInitSelectedNode}
+                onFocus={onSearchFocus}
+                onChange={onSearchSelect}
+              />
+            )}
+          </div>
+          <div className="pointer-events-auto shrink-0">
+            <GraphViewSelector />
+          </div>
         </div>
 
         <div className="bg-background/60 absolute bottom-2 left-2 flex flex-col rounded-xl border-2 backdrop-blur-lg">

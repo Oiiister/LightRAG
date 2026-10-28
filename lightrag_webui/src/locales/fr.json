@@ -116,6 +116,16 @@
         "fileTooLarge": "Fichier trop volumineux, taille maximale {{maxSize}}",
         "dropHere": "Déposez les fichiers ici",
         "dragAndDrop": "Glissez et déposez les fichiers ici, ou cliquez pour sélectionner",
+        "previewFile": "Aperçu du fichier",
+        "previewDescription": "{{size}} · Aperçu local",
+        "previewImageAlt": "Aperçu de {{name}}",
+        "previewPdfTitle": "Aperçu PDF de {{name}}",
+        "previewLoading": "Chargement de l'aperçu...",
+        "previewError": "Impossible de lire ce fichier.",
+        "previewTruncated": "Affichage des premiers {{maxSize}} de ce fichier.",
+        "previewEmptyFile": "Ce fichier est vide.",
+        "previewUnavailableTitle": "Aperçu indisponible",
+        "previewUnavailableDescription": "Ce type de fichier ne peut pas être prévisualisé dans le navigateur. Vous pouvez toujours le téléverser.",
         "removeFile": "Supprimer le fichier",
         "uploadDescription": "Vous pouvez télécharger {{isMultiple ? 'plusieurs' : count}} fichiers (jusqu'à {{maxSize}} chacun)",
         "duplicateFile": "Le nom du fichier existe déjà dans le cache du serveur"
@@ -175,6 +185,10 @@
       "hideButton": "Masquer",
       "showFileNameTooltip": "Afficher le nom du fichier",
       "hideFileNameTooltip": "Masquer le nom du fichier",
+      "preview": {
+        "openTooltip": "Aperçu du fichier source",
+        "loadFailed": "Impossible de charger le fichier source\n{{error}}"
+      },
       "details": {
         "title": "Détails du statut",
         "openTooltip": "Afficher les détails du statut",

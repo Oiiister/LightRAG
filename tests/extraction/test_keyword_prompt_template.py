@@ -14,7 +14,7 @@ def test_keywords_extraction_prompt_template_formats_with_literal_json_braces():
         language="en",
     )
 
-    assert "first character of your response must be `{`" in rendered
+    assert "响应的第一个字符必须是 `{`" in rendered
     assert '{"high_level_keywords": [], "low_level_keywords": []}' in rendered
 
 
@@ -48,11 +48,12 @@ def test_keywords_extraction_prompt_labels_template_as_not_source_text():
     assert "---Output Format Template---" in prompt
     assert "---Examples---" not in prompt
     assert "Apple Inc." not in prompt
-    assert "output JSON format template only" in prompt
-    assert "not source text" in prompt
-    assert "must never be used as keyword extraction content" in prompt
+    assert "只是输出 JSON 格式模板" in prompt
+    assert "不是源文本" in prompt
+    assert "绝不能作为关键词提取的内容" in prompt
     assert (
-        "derived only from the `User Query` in the `---Real Data---` section" in prompt
+        "所有关键词都必须仅从 `---Real Data---` 部分中的 `User Query` 明确推导得出"
+        in prompt
     )
 
 

@@ -49,7 +49,9 @@ describe('BFCache consumers', () => {
       expect(source).not.toContain('addEventListener(\'beforeunload\'')
     }
 
-    expect(appSource).toContain('[enableHealthCheck, apiKeyAlertOpen, pageRestoreGeneration]')
+    expect(appSource).toContain(
+      '[enableHealthCheck, apiKeyAlertOpen, pageRestoreGeneration, workspaceReady]'
+    )
     expect(documentManagerSource).toContain(
       'pipelineActive, pageRestoreGeneration, startPollingInterval'
     )

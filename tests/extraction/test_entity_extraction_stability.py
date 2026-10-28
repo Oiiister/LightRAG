@@ -303,9 +303,9 @@ def test_entity_extraction_system_prompts_label_examples_as_format_templates():
         prompt = PROMPTS[prompt_key]
         assert "---Output Format Template---" in prompt
         assert "---Examples---" not in prompt
-        assert "output format template only" in prompt
-        assert "not source text" in prompt
-        assert "must never be used as extraction content" in prompt
+        assert "只是输出格式模板" in prompt
+        assert "不是源文本" in prompt
+        assert "绝不能作为实体或关系提取的内容" in prompt
 
 
 @pytest.mark.offline
@@ -414,10 +414,10 @@ async def test_text_mode_default_guidance_injected_into_prompt():
     call_kwargs = llm_func.call_args_list[0][1]
     system_prompt = call_kwargs.get("system_prompt", "")
     assert PROMPTS["default_entity_types_guidance"] in system_prompt
-    assert "must start with `relation`, never `entity`" in system_prompt
-    assert "After the last entity row, switch prefixes to `relation`" in system_prompt
-    assert "Output at most 100 total rows" in system_prompt
-    assert "Output at most 40 entity rows" in system_prompt
+    assert "必须以 `relation` 开头，绝不能使用 `entity`" in system_prompt
+    assert "所有关系行都必须改用 `relation` 前缀" in system_prompt
+    assert "实体和关系合计最多输出 100 行" in system_prompt
+    assert "最多输出 40 行实体" in system_prompt
 
 
 @pytest.mark.offline
@@ -451,15 +451,15 @@ def test_text_continue_prompt_requires_relation_prefix_for_corrections():
 
     prompt = PROMPTS["entity_continue_extraction_user_prompt"]
     assert (
-        "Any corrected relationship row must be emitted with the literal `relation` prefix"
+        "任何更正后的关系行都必须以字面量 `relation` 作为前缀"
         in prompt
     )
     assert (
-        "output at most {max_total_records} total rows and at most {max_entity_records} entity rows"
+        "最多输出 {max_total_records} 行，其中最多 {max_entity_records} 行实体"
         in prompt
     )
     assert (
-        "may reference entities that were already extracted correctly in the previous response"
+        "关系行可以引用上一次响应中已正确提取的实体"
         in prompt
     )
     assert (
@@ -474,11 +474,11 @@ def test_text_user_prompt_includes_quantity_limits():
 
     prompt = PROMPTS["entity_extraction_user_prompt"]
     assert (
-        "output at most {max_total_records} total rows and at most {max_entity_records} entity rows"
+        "最多输出 {max_total_records} 行，其中最多 {max_entity_records} 行实体"
         in prompt
     )
     assert (
-        "If the row limit is reached, output `{completion_delimiter}` immediately"
+        "如果已达到行数上限，则在最后一条允许输出的记录之后立即输出 `{completion_delimiter}`"
         in prompt
     )
 
@@ -533,8 +533,8 @@ async def test_json_mode_default_guidance_injected_into_prompt():
     call_kwargs = llm_func.call_args_list[0][1]
     system_prompt = call_kwargs.get("system_prompt", "")
     assert PROMPTS["default_entity_types_guidance"] in system_prompt
-    assert "Output at most 100 total records" in system_prompt
-    assert "Output at most 40 entity objects" in system_prompt
+    assert "合计最多输出 100 条记录" in system_prompt
+    assert "最多输出 40 个实体对象" in system_prompt
 
 
 @pytest.mark.offline
@@ -590,11 +590,11 @@ def test_json_user_prompt_includes_quantity_limits():
 
     prompt = PROMPTS["entity_extraction_json_user_prompt"]
     assert (
-        "output at most {max_total_records} total records and at most {max_entity_records} entity objects"
+        "最多输出 {max_total_records} 条记录，其中最多 {max_entity_records} 个实体对象"
         in prompt
     )
     assert (
-        "Only output relationship objects whose `source` and `target` are both included"
+        "仅输出 `source` 和 `target` 都包含在本次响应中的关系对象"
         in prompt
     )
 
@@ -605,11 +605,11 @@ def test_json_continue_prompt_includes_quantity_limits():
 
     prompt = PROMPTS["entity_continue_extraction_json_user_prompt"]
     assert (
-        "output at most {max_total_records} total records and at most {max_entity_records} entity objects"
+        "最多输出 {max_total_records} 条记录，其中最多 {max_entity_records} 个实体对象"
         in prompt
     )
     assert (
-        "may reference entities already extracted correctly in the previous response"
+        "关系对象可以引用上一次响应中已正确提取的实体"
         in prompt
     )
 
@@ -1433,7 +1433,7 @@ def test_extraction_system_prompts_reference_section_context():
         "entity_extraction_json_system_prompt",
     ):
         assert _SECTION_MARKER in PROMPTS[key]
-        assert "only as background" in PROMPTS[key]
+        assert "只能将其**作为背景信息**" in PROMPTS[key]
 
 
 @pytest.mark.offline

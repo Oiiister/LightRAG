@@ -1,25 +1,44 @@
-### When ENTITY_EXTRACTION_USE_JSON=false, entity_extraction_examples section must include in this file
-### When ENTITY_EXTRACTION_USE_JSON=true, entity_extraction_json_examples section must include in this file
+### 当 ENTITY_EXTRACTION_USE_JSON=false 时，此文件必须包含 entity_extraction_examples
+### 当 ENTITY_EXTRACTION_USE_JSON=true 时，此文件必须包含 entity_extraction_json_examples
 
 entity_types_guidance: |
-  Classify each entity using one of the following types. If no type fits, use `Other`.
+  请从以下类型中选择一种，对每个实体进行分类。如果没有合适的类型，请使用 `Other`。
 
-  - Person: Human individuals, real or fictional
-  - Creature: Non-human living beings (animals, mythical beings, etc.)
-  - Organization: Companies, institutions, government bodies, groups
-  - Location: Geographic places (cities, countries, buildings, regions)
-  - Event: Occurrences, incidents, ceremonies, meetings
-  - Concept: Abstract ideas, theories, principles, beliefs
-  - Method: Procedures, techniques, algorithms, workflows
-  - Content: Creative or informational works (books, articles, films, reports)
-  - Data: Quantitative or structured information (statistics, datasets, measurements)
-  - Artifact: Physical or digital objects created by humans (tools, software, devices)
-  - NaturalObject: Natural non-living objects (minerals, celestial bodies, chemical compounds)
+  - Person：真实或虚构的人物个体
+  - Creature：非人类生物，包括动物、神话生物等
+  - Organization：公司、机构、政府部门或团体
+  - Location：地理位置，包括城市、国家、建筑或地区
+  - Event：发生的事件、事故、仪式或会议
+  - Concept：抽象思想、理论、原则或信念
+  - Method：流程、技术、算法或工作流
+  - Content：创作或信息类作品，包括书籍、文章、电影或报告
+  - Data：定量或结构化信息，包括统计数据、数据集或测量结果
+  - Artifact：人类创造的实体或数字对象，包括工具、软件或设备
+  - NaturalObject：自然界的非生命物体，包括矿物、天体或化合物
+
+
+
+
+
+
+domain_extraction_rules: ""
+
+
+
+
+
 entity_extraction_examples:
   - |
     entity{tuple_delimiter}<entity_name>{tuple_delimiter}<entity_type>{tuple_delimiter}<entity_description>
     relation{tuple_delimiter}<source_entity>{tuple_delimiter}<target_entity>{tuple_delimiter}<relationship_keywords>{tuple_delimiter}<relationship_description>
     {completion_delimiter}
+
+
+
+
+
+
+
 entity_extraction_json_examples:
   - |
     {

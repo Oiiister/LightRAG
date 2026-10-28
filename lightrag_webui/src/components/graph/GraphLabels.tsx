@@ -13,7 +13,13 @@ import { useTranslation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { SearchHistoryManager } from '@/utils/SearchHistoryManager'
-import { getPopularLabels, searchLabels } from '@/api/lightrag'
+import {
+  getLabelDetails,
+  getPopularLabelOptions,
+  searchLabelOptions,
+  type GraphLabelOption
+} from '@/api/lightrag'
+import { formatGraphLabel } from '@/utils/graphLabel'
 
 const GraphLabels = () => {
   const { t } = useTranslation()
@@ -22,11 +28,63 @@ const GraphLabels = () => {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [selectKey, setSelectKey] = useState(0)
+  const labelTypeCacheRef = useRef(new Map<string, GraphLabelOption>())
 
   // Pipeline state monitoring
   const pipelineBusy = useBackendState.use.pipelineBusy()
   const prevPipelineBusy = useRef<boolean | undefined>(undefined)
   const shouldRefreshPopularLabelsRef = useRef(false)
+
+  const cacheLabelOptions = useCallback((options: GraphLabelOption[]) => {
+    for (const option of options) {
+      if (!option.label) continue
+      if (option.exists === false) {
+        // A confirmed absence is a fact about this read, not a cache entry:
+        // the label may be re-ingested later during this component's lifetime.
+        labelTypeCacheRef.current.delete(option.label)
+      } else {
+        labelTypeCacheRef.current.set(option.label, option)
+      }
+    }
+  }, [])
+
+  const enrichHistoryLabels = useCallback(
+    async (labels: string[]): Promise<GraphLabelOption[]> => {
+      const missing = labels.filter(
+        (item) => !labelTypeCacheRef.current.has(item)
+      )
+      if (missing.length > 0) {
+        try {
+          const details = await getLabelDetails(missing)
+          cacheLabelOptions(details)
+          const detailsByLabel = new Map(
+            details.map((option) => [option.label, option])
+          )
+          return labels.flatMap((item) => {
+            const detail = detailsByLabel.get(item)
+            if (detail?.exists === false) {
+              return []
+            }
+            const cached = labelTypeCacheRef.current.get(item)
+            if (cached?.exists === false) {
+              return []
+            }
+            return [cached ?? { label: item, type: '' }]
+          })
+        } catch (error) {
+          console.error('Failed to load label types:', error)
+        }
+      }
+      return labels.flatMap((item) => {
+        const cached = labelTypeCacheRef.current.get(item)
+        if (cached?.exists === false) {
+          return []
+        }
+        return [cached ?? { label: item, type: '' }]
+      })
+    },
+    [cacheLabelOptions]
+  )
 
   // Dynamic tooltip based on current label state
   const getRefreshTooltip = useCallback(() => {
@@ -44,22 +102,29 @@ const GraphLabels = () => {
   // Initialize search history on component mount
   useEffect(() => {
     const initializeHistory = async () => {
-      const history = SearchHistoryManager.getHistory()
-
-      if (history.length === 0) {
-        // If no history exists, fetch popular labels and initialize
-        try {
-          const popularLabels = await getPopularLabels(popularLabelsDefaultLimit)
+      try {
+        // Popular labels can change while this tab is unmounted. Merge the
+        // current server list on every mount so newly ingested entities appear
+        // without discarding the browser's real recent searches.
+        const popularOptions = await getPopularLabelOptions(
+          popularLabelsDefaultLimit
+        )
+        cacheLabelOptions(popularOptions)
+        const popularLabels = popularOptions.map((option) => option.label)
+        if (popularLabels.length > 0) {
+          SearchHistoryManager.mergePopularLabels(popularLabels)
+        } else if (SearchHistoryManager.getHistory().length === 0) {
           await SearchHistoryManager.initializeWithDefaults(popularLabels)
-        } catch (error) {
-          console.error('Failed to initialize search history:', error)
-          // No fallback needed, API is the source of truth
         }
+        setRefreshTrigger((previous) => previous + 1)
+      } catch (error) {
+        console.error('Failed to initialize search history:', error)
+        // No fallback needed, API is the source of truth
       }
     }
 
     initializeHistory()
-  }, [])
+  }, [cacheLabelOptions])
 
   // Force AsyncSelect to re-render when label or dropdownRefreshTrigger changes.
   // Uses render-time previous-value comparison to avoid cascading renders from
@@ -92,14 +157,18 @@ const GraphLabels = () => {
 
     console.log('Reloading popular labels (triggered by pipeline idle)')
     try {
-      const popularLabels = await getPopularLabels(popularLabelsDefaultLimit)
-      SearchHistoryManager.clearHistory()
+      const popularOptions = await getPopularLabelOptions(
+        popularLabelsDefaultLimit
+      )
+      cacheLabelOptions(popularOptions)
+      const popularLabels = popularOptions.map((option) => option.label)
 
       if (popularLabels.length === 0) {
+        SearchHistoryManager.clearHistory()
         const fallbackLabels = ['entity', 'relationship', 'document', 'concept']
         await SearchHistoryManager.initializeWithDefaults(fallbackLabels)
       } else {
-        await SearchHistoryManager.initializeWithDefaults(popularLabels)
+        SearchHistoryManager.mergePopularLabels(popularLabels)
       }
     } catch (error) {
       console.error('Failed to reload popular labels:', error)
@@ -110,7 +179,7 @@ const GraphLabels = () => {
       // Always clear the flag
       shouldRefreshPopularLabelsRef.current = false
     }
-  }, [])
+  }, [cacheLabelOptions])
 
   // Helper: Bump dropdown data to trigger refresh
   const bumpDropdownData = useCallback(({ forceSelectKey = false } = {}) => {
@@ -121,36 +190,52 @@ const GraphLabels = () => {
   }, [])
 
   const fetchData = useCallback(
-    async (query?: string): Promise<string[]> => {
-      let results: string[];
+    async (query?: string): Promise<GraphLabelOption[]> => {
+      let results: GraphLabelOption[];
       if (!query || query.trim() === '' || query.trim() === '*') {
         // Empty query: return search history
-        results = SearchHistoryManager.getHistoryLabels(dropdownDisplayLimit)
+        results = await enrichHistoryLabels(
+          SearchHistoryManager.getHistoryLabels(dropdownDisplayLimit)
+        )
       } else {
         // Non-empty query: call backend search API
         try {
-          const apiResults = await searchLabels(query.trim(), searchLabelsDefaultLimit)
+          const apiResults = await searchLabelOptions(
+            query.trim(),
+            searchLabelsDefaultLimit
+          )
+          cacheLabelOptions(apiResults)
           results = apiResults.length <= dropdownDisplayLimit
             ? apiResults
-            : [...apiResults.slice(0, dropdownDisplayLimit), '...']
+            : [
+              ...apiResults.slice(0, dropdownDisplayLimit),
+              { label: '...', type: '' }
+            ]
         } catch (error) {
           console.error('Search API failed, falling back to local history search:', error)
 
           // Fallback to local history search
           const history = SearchHistoryManager.getHistory()
           const queryLower = query.toLowerCase().trim()
-          results = history
+          const fallbackLabels = history
             .filter(item => item.label.toLowerCase().includes(queryLower))
             .map(item => item.label)
             .slice(0, dropdownDisplayLimit)
+          results = await enrichHistoryLabels(fallbackLabels)
         }
       }
       // Always show '*' at the top, and remove duplicates
-      const finalResults = ['*', ...results.filter(label => label !== '*')];
+      const seen = new Set<string>(['*'])
+      const finalResults: GraphLabelOption[] = [{ label: '*', type: '' }]
+      for (const option of results) {
+        if (seen.has(option.label)) continue
+        seen.add(option.label)
+        finalResults.push(option)
+      }
       return finalResults;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [refreshTrigger] // Intentionally added to trigger re-creation when data changes
+    [refreshTrigger, cacheLabelOptions, enrichHistoryLabels]
   )
 
   const handleRefresh = useCallback(async () => {
@@ -195,15 +280,19 @@ const GraphLabels = () => {
 
         try {
           // Re-fetch popular labels and update search history (if not already done)
-          const popularLabels = await getPopularLabels(popularLabelsDefaultLimit)
-          SearchHistoryManager.clearHistory()
+          const popularOptions = await getPopularLabelOptions(
+            popularLabelsDefaultLimit
+          )
+          cacheLabelOptions(popularOptions)
+          const popularLabels = popularOptions.map((option) => option.label)
 
           if (popularLabels.length === 0) {
             // If no popular labels, provide fallback defaults
+            SearchHistoryManager.clearHistory()
             const fallbackLabels = ['entity', 'relationship', 'document', 'concept']
             await SearchHistoryManager.initializeWithDefaults(fallbackLabels)
           } else {
-            await SearchHistoryManager.initializeWithDefaults(popularLabels)
+            SearchHistoryManager.mergePopularLabels(popularLabels)
           }
         } catch (error) {
           console.error('Failed to reload popular labels:', error)
@@ -232,7 +321,7 @@ const GraphLabels = () => {
     } finally {
       setIsRefreshing(false)
     }
-  }, [label, reloadPopularLabels, bumpDropdownData])
+  }, [label, reloadPopularLabels, bumpDropdownData, cacheLabelOptions])
 
   // Handle dropdown before open - reload popular labels if needed
   const handleDropdownBeforeOpen = useCallback(async () => {
@@ -257,7 +346,7 @@ const GraphLabels = () => {
         <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
       </Button>
       <div className="w-full min-w-[280px] max-w-[500px]">
-        <AsyncSelect<string>
+        <AsyncSelect<GraphLabelOption>
           key={selectKey} // Force re-render when data changes
           className="min-w-[300px]"
           triggerClassName="max-h-8 w-full overflow-hidden"
@@ -266,14 +355,34 @@ const GraphLabels = () => {
           fetcher={fetchData}
           onBeforeOpen={handleDropdownBeforeOpen}
           renderOption={(item) => (
-            <div className="truncate" title={item}>
-              {item}
+            <div
+              className="flex min-w-0 flex-1 items-center gap-2"
+              title={formatGraphLabel(item.label)}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {formatGraphLabel(item.label)}
+              </span>
+              {item.type && (
+                <span className="text-muted-foreground shrink-0 rounded border px-1.5 py-0.5 text-[10px]">
+                  {item.type}
+                </span>
+              )}
             </div>
           )}
-          getOptionValue={(item) => item}
+          getOptionValue={(item) => item.label}
           getDisplayValue={(item) => (
-            <div className="min-w-0 flex-1 truncate text-left" title={item}>
-              {item}
+            <div
+              className="flex min-w-0 flex-1 items-center gap-2 text-left"
+              title={formatGraphLabel(item.label)}
+            >
+              <span className="min-w-0 flex-1 truncate">
+                {formatGraphLabel(item.label)}
+              </span>
+              {item.type && (
+                <span className="text-muted-foreground shrink-0 rounded border px-1.5 py-0.5 text-[10px]">
+                  {item.type}
+                </span>
+              )}
             </div>
           )}
           notFound={<div className="py-6 text-center text-sm">{t('graphPanel.graphLabels.noLabels')}</div>}

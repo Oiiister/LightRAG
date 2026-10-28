@@ -81,7 +81,8 @@ const backend = {
   recordFilters: false,
   paginatedCalls: 0,
   healthCalls: 0,
-  deleteCalls: 0
+  deleteCalls: 0,
+  filePreviewCalls: 0
 }
 
 const resetBackend = () => {
@@ -97,6 +98,7 @@ const resetBackend = () => {
   backend.paginatedCalls = 0
   backend.healthCalls = 0
   backend.deleteCalls = 0
+  backend.filePreviewCalls = 0
 }
 
 const paginate = (statusFilter: string | null): PaginatedDocsResponse => {
@@ -170,6 +172,14 @@ const backendAdapter = async (config: any) => {
     })
   }
 
+  if (url === `/documents/${DOC_ID}/file`) {
+    backend.filePreviewCalls += 1
+    return respond(
+      config,
+      new Blob(['source file after processing'], { type: 'text/plain' })
+    )
+  }
+
   return respond(config, {})
 }
 
@@ -214,6 +224,30 @@ describe('DocumentManager post-action refreshes', () => {
 
   afterAll(() => {
     __setAxiosAdapterForTests(undefined)
+  })
+
+  test('a processed document can be previewed from its table row', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<DocumentManager />)
+
+    await waitFor(() => {
+      expect(rowFor(DOC_ID) === null).toBe(false)
+    })
+
+    const row = rowFor(DOC_ID)
+    expect(row === null).toBe(false)
+    await user.click(
+      within(row as HTMLElement).getByRole('button', {
+        name: 'Preview source file'
+      })
+    )
+
+    expect(
+      (
+        await screen.findByText('source file after processing')
+      ).textContent
+    ).toBe('source file after processing')
+    expect(backend.filePreviewCalls).toBe(1)
   })
 
   test(

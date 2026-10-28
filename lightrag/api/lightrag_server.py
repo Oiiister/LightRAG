@@ -13,7 +13,6 @@ from fastapi.openapi.docs import (
 import asyncio
 import json
 import os
-import re
 import logging
 import logging.config
 import sys
@@ -49,6 +48,7 @@ from .config import (
 )
 from lightrag.utils import get_env_value
 from lightrag import LightRAG, ROLES, RoleLLMConfig, __version__ as core_version
+from lightrag.fault_tree.service import configure_fault_tree_validator
 from lightrag.api import __api_version__
 from lightrag.utils import EmbeddingFunc
 from lightrag.constants import (
@@ -74,6 +74,12 @@ from lightrag.api.routers.query_routes import create_query_routes
 from lightrag.api.routers.graph_routes import create_graph_routes
 from lightrag.api.routers.ollama_api import OllamaAPI
 from lightrag.api.routers.ui_customization_routes import create_ui_customization_routes
+from lightrag.api.routers.workspace_routes import create_workspace_routes
+from lightrag.api.workspace_registry import WorkspaceRegistry
+from lightrag.api.workspace_runtime import (
+    WorkspaceRuntime,
+    WorkspaceScopeMiddleware,
+)
 from lightrag.api.ui_customization import (
     WEBUI_CHROME_LOCALES,
     locales_without_chrome_translation,
@@ -1634,9 +1640,6 @@ def create_app(args):
     # Check if API key is provided either through env var or args
     api_key = os.getenv("LIGHTRAG_API_KEY") or args.key
 
-    # Initialize document manager with workspace support for data isolation
-    doc_manager = DocumentManager(args.input_dir, workspace=args.workspace)
-
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """Lifespan context manager for startup and shutdown events"""
@@ -1644,12 +1647,10 @@ def create_app(args):
         app.state.background_tasks = set()
 
         try:
-            # Initialize database connections
-            # Note: initialize_storages() now auto-initializes pipeline_status for rag.workspace
-            await rag.initialize_storages()
-
-            # Data migration regardless of storage implementation
-            await rag.check_and_migrate_data()
+            # Initialize the deployment's default workspace. Named workspaces
+            # are built and migrated lazily on their first request, with the
+            # same storage configuration and pipeline bootstrap.
+            await workspace_runtime.initialize_default()
 
             # Admission control needs a doc_status backend that can count
             # strictly (LR2 §9.1). Probe once here so an unsupported backend
@@ -1684,8 +1685,8 @@ def create_app(args):
                 app.state.background_tasks
             )
 
-            # Clean up database connections
-            await rag.finalize_storages()
+            # Clean up every workspace that was opened during this process.
+            await workspace_runtime.finalize_all()
 
             if "LIGHTRAG_GUNICORN_MODE" not in os.environ:
                 # Only perform cleanup in Uvicorn single-process mode
@@ -1826,6 +1827,17 @@ def create_app(args):
     if body_limits is not None:
         app.add_middleware(BodyLimitMiddleware, api_prefix=api_prefix, **body_limits)
 
+    # Bind LIGHTRAG-WORKSPACE before admission and route handling. The runtime
+    # is assembled below, once the model functions and storage configuration
+    # exist, so the middleware receives a lazy getter. It sits outside admission
+    # (which reads the scoped instance) and inside CORS (which must add browser
+    # headers even to workspace resolution errors).
+    workspace_runtime_holder: dict[str, WorkspaceRuntime] = {}
+    app.add_middleware(
+        WorkspaceScopeMiddleware,
+        runtime_getter=lambda: workspace_runtime_holder["runtime"],
+    )
+
     # Add CORS middleware
     cors_origins = get_cors_origins()
     # Per the Fetch spec, the wildcard origin "*" and credentialed requests are
@@ -1860,36 +1872,6 @@ def create_app(args):
     # Non-enforcing dependency: reports whether the caller is authenticated so
     # /health can stay a public liveness probe while gating sensitive config.
     auth_status = get_auth_status_dependency(api_key)
-
-    def get_workspace_from_request(request: Request) -> str | None:
-        """
-        Extract workspace from HTTP request header or use default.
-
-        This enables multi-workspace API support by checking the custom
-        'LIGHTRAG-WORKSPACE' header. If not present, falls back to the
-        server's default workspace configuration.
-
-        Args:
-            request: FastAPI Request object
-
-        Returns:
-            Workspace identifier (may be empty string for global namespace)
-        """
-        # Check custom header first
-        workspace = request.headers.get("LIGHTRAG-WORKSPACE", "").strip()
-
-        if not workspace:
-            workspace = None
-        else:
-            sanitized = re.sub(r"[^a-zA-Z0-9_]", "_", workspace)
-            if sanitized != workspace:
-                logger.warning(
-                    f"Workspace header '{workspace}' contains invalid characters. "
-                    f"Sanitized to '{sanitized}'."
-                )
-                workspace = sanitized
-
-        return workspace
 
     # Create working directory if it doesn't exist
     Path(args.working_dir).mkdir(parents=True, exist_ok=True)
@@ -2508,12 +2490,13 @@ def create_app(args):
         for spec in ROLES
     }
 
-    # Initialize RAG with unified configuration
-    try:
-        rag = LightRAG(
+    # The same configuration builds the default instance and every named
+    # workspace opened at request time. Only ``workspace`` changes.
+    def build_rag_instance(workspace: str):
+        return LightRAG(
             **({"chunking_func": selected_chunker} if selected_chunker else {}),
             working_dir=args.working_dir,
-            workspace=args.workspace,
+            workspace=workspace,
             llm_model_func=create_llm_model_func(args.llm_binding),
             llm_model_name=args.llm_model,
             llm_model_max_async=args.max_async,
@@ -2576,18 +2559,50 @@ def create_app(args):
                 for spec in ROLES
             },
         )
+
+    try:
+        default_rag = build_rag_instance(args.workspace)
     except Exception as e:
         logger.error(f"Failed to initialize LightRAG: {e}")
         raise
 
-    _log_role_provider_options(rag)
+    _log_role_provider_options(default_rag)
+    configure_fault_tree_validator(default_rag)
 
-    rag.register_role_llm_builder(
+    default_rag.register_role_llm_builder(
         lambda role, meta: (
             create_role_llm_func(role, meta),
             create_role_llm_model_kwargs(role, meta),
         )
     )
+
+    def configure_workspace_instance(instance):
+        configure_fault_tree_validator(instance)
+        instance.register_role_llm_builder(
+            lambda role, meta: (
+                create_role_llm_func(role, meta),
+                create_role_llm_model_kwargs(role, meta),
+            )
+        )
+
+    workspace_registry = WorkspaceRegistry(args.working_dir)
+    default_workspace_record = workspace_registry.ensure_default(
+        args.workspace,
+        name=args.workspace or "Default",
+    )
+    workspace_runtime = WorkspaceRuntime(
+        registry=workspace_registry,
+        default_record=default_workspace_record,
+        default_rag=default_rag,
+        rag_factory=build_rag_instance,
+        document_manager_factory=lambda workspace: DocumentManager(
+            args.input_dir, workspace=workspace
+        ),
+        on_instance_created=configure_workspace_instance,
+    )
+    workspace_runtime_holder["runtime"] = workspace_runtime
+    rag = workspace_runtime.rag
+    doc_manager = workspace_runtime.document_manager
 
     # Add routes
     # root_path is set on the app for reverse proxy support;
@@ -2595,6 +2610,7 @@ def create_app(args):
     app.include_router(create_document_routes(rag, doc_manager, api_key))
     app.include_router(create_query_routes(rag, api_key, args.top_k))
     app.include_router(create_graph_routes(rag, api_key))
+    app.include_router(create_workspace_routes(workspace_runtime, api_key))
     # Public read-only customization surface — registered unconditionally:
     # without a bundle it answers 200 {"customized": false, ...}.
     app.include_router(
@@ -2912,7 +2928,11 @@ def create_app(args):
         caller is authenticated (see get_auth_status_dependency).
         """
         try:
-            workspace = get_workspace_from_request(request)
+            # The middleware has already resolved LIGHTRAG-WORKSPACE (including
+            # the public "default" id, which may map to the empty namespace).
+            # Read from the scoped instance so health and every other route
+            # observe exactly the same pipeline state.
+            workspace = rag.workspace
             default_workspace = get_default_workspace()
             if workspace is None:
                 workspace = default_workspace

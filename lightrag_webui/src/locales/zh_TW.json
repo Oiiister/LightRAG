@@ -116,6 +116,16 @@
         "fileTooLarge": "檔案過大，最大允許 {{maxSize}}",
         "dropHere": "將檔案拖放至此處",
         "dragAndDrop": "拖放檔案至此處，或點擊選擇檔案",
+        "previewFile": "預覽檔案",
+        "previewDescription": "{{size}} · 本機預覽",
+        "previewImageAlt": "{{name}} 的預覽",
+        "previewPdfTitle": "{{name}} 的 PDF 預覽",
+        "previewLoading": "正在載入預覽...",
+        "previewError": "無法讀取此檔案。",
+        "previewTruncated": "僅顯示檔案的前 {{maxSize}}。",
+        "previewEmptyFile": "此檔案為空。",
+        "previewUnavailableTitle": "無法預覽",
+        "previewUnavailableDescription": "瀏覽器無法預覽此檔案類型，但仍可正常上傳。",
         "removeFile": "移除檔案",
         "uploadDescription": "您可以上傳{{isMultiple ? '多個' : count}}個檔案（每個檔案最大{{maxSize}}）",
         "duplicateFile": "檔案名稱與伺服器上的快取重複"
@@ -175,6 +185,10 @@
       "hideButton": "隱藏",
       "showFileNameTooltip": "顯示檔案名稱",
       "hideFileNameTooltip": "隱藏檔案名稱",
+      "preview": {
+        "openTooltip": "預覽原始檔案",
+        "loadFailed": "載入原始檔案失敗\n{{error}}"
+      },
       "details": {
         "title": "狀態詳情",
         "openTooltip": "檢視狀態詳情",

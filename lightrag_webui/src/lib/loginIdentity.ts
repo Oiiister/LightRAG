@@ -1,11 +1,8 @@
 import { create } from 'zustand'
-import { useWebuiRetrievalHistoryStore } from '@/stores/webuiRetrievalHistory'
+import { clearAllWebuiRetrievalHistories } from '@/stores/webuiRetrievalHistory'
 import { useWorkspaceRetrievalHistoryStore } from '@/stores/workspaceRetrievalHistory'
 import { initAuthState, useAuthStore } from '@/stores/state'
-import {
-  WEBUI_RETRIEVAL_HISTORY_KEY,
-  WORKSPACE_RETRIEVAL_HISTORY_KEY
-} from '@/lib/storageKeys'
+import { WORKSPACE_RETRIEVAL_HISTORY_KEY } from '@/lib/storageKeys'
 import { decodeBase64Url, legacyMojibakeForm } from '@/lib/base64url'
 
 /**
@@ -118,12 +115,11 @@ export function applyLoginIdentity(identity: string): boolean {
     // and hydrate them. Raw key removal is version-agnostic: no client, old
     // or new, has anything left to hydrate.
     try {
-      localStorage.removeItem(WEBUI_RETRIEVAL_HISTORY_KEY)
       localStorage.removeItem(WORKSPACE_RETRIEVAL_HISTORY_KEY)
     } catch (error) {
       console.error('Failed to remove persisted retrieval histories:', error)
     }
-    useWebuiRetrievalHistoryStore.getState().clearHistory()
+    clearAllWebuiRetrievalHistories()
     useWorkspaceRetrievalHistoryStore.getState().clearHistory()
   }
 
@@ -203,7 +199,7 @@ export function handleIdentityStorageEvent(event: {
   // PRESERVES the histories, and the next activation decides.
   if (event.newValue == null) return
   if (!isIdentityChange(event.oldValue ?? null, event.newValue)) return
-  useWebuiRetrievalHistoryStore.getState().clearHistory()
+  clearAllWebuiRetrievalHistories()
   useWorkspaceRetrievalHistoryStore.getState().clearHistory()
   useIdentityEpochStore.setState((state) => ({ epoch: state.epoch + 1 }))
 }

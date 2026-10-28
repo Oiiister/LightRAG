@@ -116,6 +116,16 @@
         "fileTooLarge": "文件过大，最大允许 {{maxSize}}",
         "dropHere": "将文件拖放到此处",
         "dragAndDrop": "拖放文件到此处，或点击选择文件",
+        "previewFile": "预览文件",
+        "previewDescription": "{{size}} · 本地预览",
+        "previewImageAlt": "{{name}} 的预览",
+        "previewPdfTitle": "{{name}} 的 PDF 预览",
+        "previewLoading": "正在加载预览...",
+        "previewError": "无法读取此文件。",
+        "previewTruncated": "仅显示文件的前 {{maxSize}}。",
+        "previewEmptyFile": "此文件为空。",
+        "previewUnavailableTitle": "无法预览",
+        "previewUnavailableDescription": "浏览器无法预览此文件类型，但仍可正常上传。",
         "removeFile": "移除文件",
         "uploadDescription": "您可以上传{{isMultiple ? '多个' : count}}个文件（每个文件最大{{maxSize}}）",
         "duplicateFile": "文件名与服务器上的缓存重复"
@@ -175,6 +185,10 @@
       "hideButton": "隐藏",
       "showFileNameTooltip": "显示文件名",
       "hideFileNameTooltip": "隐藏文件名",
+      "preview": {
+        "openTooltip": "预览原文件",
+        "loadFailed": "加载原文件失败\n{{error}}"
+      },
       "details": {
         "title": "状态详情",
         "openTooltip": "查看状态详情",
@@ -210,6 +224,22 @@
     }
   },
   "graphPanel": {
+    "faultDepth": {
+      "root": "根故障",
+      "level": "{{band}}级原因",
+      "deeper": "{{band}}+级原因"
+    },
+    "graphViews": {
+      "departmentFiles": "部门文件",
+      "departmentEquipment": "部门设备",
+      "equipmentFaults": "设备故障",
+      "faultCauses": "故障因果",
+      "invalidFaultRoot": "“{{root}}”是 {{type}} 类型节点，不是 FaultEvent，不能作为故障因果的根节点。请先在顶部标签搜索中选择故障事件。",
+      "invalidFaultRootUnknownType": "“{{root}}”不是 FaultEvent，不能作为故障因果的根节点。请先在顶部标签搜索中选择故障事件。",
+      "missingFaultRoot": "“{{root}}”在当前图谱中已不存在，请从最新的标签列表中选择一个故障事件。",
+      "requestRejected": "图谱视图请求被拒绝（{{status}}）。如果这是刚新增的接口，请重启后端服务。",
+      "selectFaultHint": "请在上方标签搜索中选择一个故障事件作为因果图根节点。"
+    },
     "dataIsTruncated": "图数据已截断至最大返回节点数",
     "fetchRetriesExhausted": "加载图数据失败。请刷新后重试。",
     "graphBuildFailed": "渲染图数据失败。请刷新后重试。",
@@ -517,6 +547,35 @@
     "prevPage": "上一页",
     "nextPage": "下一页",
     "lastPage": "末页"
+  },
+  "workspaceSwitcher": {
+    "switchButton": "切换工作空间",
+    "loadingWorkspace": "工作空间",
+    "defaultName": "默认工作空间",
+    "title": "工作空间",
+    "description": "文档、知识图谱和检索均按工作空间隔离。",
+    "searchPlaceholder": "搜索工作空间",
+    "newName": "工作空间名称",
+    "openWorkspace": "打开工作空间 {{name}}",
+    "default": "默认",
+    "rename": "重命名",
+    "delete": "删除",
+    "save": "保存",
+    "cancel": "取消",
+    "createPlaceholder": "新工作空间名称",
+    "create": "创建",
+    "noMatches": "没有匹配的工作空间",
+    "empty": "暂无工作空间",
+    "deleteTitle": "删除工作空间？",
+    "deleteDescription": "将永久删除“{{name}}”中的全部文档、图谱、向量和检索索引，此操作无法撤销。",
+    "deleteConfirm": "删除工作空间",
+    "loadFailed": "无法加载工作空间：{{error}}",
+    "created": "已创建工作空间“{{name}}”",
+    "createFailed": "无法创建工作空间：{{error}}",
+    "renamed": "工作空间已重命名为“{{name}}”",
+    "renameFailed": "无法重命名工作空间：{{error}}",
+    "deleted": "已删除工作空间“{{name}}”",
+    "deleteFailed": "无法删除工作空间：{{error}}"
   },
   "workspace": {
     "welcome": {
