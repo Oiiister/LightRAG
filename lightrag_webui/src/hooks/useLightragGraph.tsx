@@ -17,6 +17,7 @@ import { resolveNodeColor, DEFAULT_NODE_COLOR } from '@/utils/graphColor'
 import { resolveFaultDepthStyle } from '@/utils/faultDepthStyle'
 import { resolveNodeType } from '@/utils/nodeType'
 import { formatGraphLabel } from '@/utils/graphLabel'
+import { applyCausalLayeredPositions } from '@/utils/causalGraphLayout'
 import {
   canLoadGraphView,
   isInvalidFaultRootResponse,
@@ -150,7 +151,9 @@ export type NodeType = {
   label: string
   size: number
   color: string
+  borderColor?: string
   viewDepth?: number
+  nodeType?: string
   highlighted?: boolean
 }
 export type EdgeType = {
@@ -265,10 +268,12 @@ const fetchGraph = async (
 }
 
 // Create a new graph instance with the raw graph data
-const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGraph | null> => {
+const createSigmaGraph = async (
+  rawGraph: RawGraph | null
+): Promise<UndirectedGraph<NodeType, EdgeType> | null> => {
   if (!rawGraph || !rawGraph.nodes.length) return null
 
-  const graph = new UndirectedGraph()
+  const graph = new UndirectedGraph<NodeType, EdgeType>()
   const typeColors = createTypeColorResolver()
   const graphViewId = useGraphStore.getState().graphViewId
   let sliceStart = performance.now()
@@ -307,7 +312,8 @@ const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGr
       y,
       size: rawNode.size,
       borderColor: NODE_BORDER_COLOR,
-      viewDepth: Number(rawNode.properties?._view_depth ?? 0)
+      viewDepth: Number(rawNode.properties?._view_depth ?? 0),
+      nodeType: resolveNodeType(rawNode.properties)
     })
   }
 
@@ -368,25 +374,6 @@ const createSigmaGraph = async (rawGraph: RawGraph | null): Promise<UndirectedGr
   }
 
   return graph
-}
-
-const applyCausalLayeredPositions = (graph: UndirectedGraph): void => {
-  const byDepth = new Map<number, string[]>()
-  graph.forEachNode((node) => {
-    const depth = Number(graph.getNodeAttribute(node, 'viewDepth') ?? 0)
-    const level = Number.isFinite(depth) ? Math.max(0, depth) : 0
-    const nodes = byDepth.get(level) || []
-    nodes.push(node)
-    byDepth.set(level, nodes)
-  })
-  for (const [depth, nodes] of byDepth.entries()) {
-    nodes.sort()
-    const span = Math.max(1, nodes.length - 1)
-    nodes.forEach((node, index) => {
-      graph.setNodeAttribute(node, 'x', (index - span / 2) * 6)
-      graph.setNodeAttribute(node, 'y', -depth * 6)
-    })
-  }
 }
 
 const useLightrangeGraph = () => {
@@ -1137,7 +1124,8 @@ const useLightrangeGraph = () => {
             y: y,
             size: nodeSize,
             borderColor: NODE_BORDER_COLOR,
-            viewDepth: Number(newNode.properties?._view_depth ?? 0)
+            viewDepth: Number(newNode.properties?._view_depth ?? 0),
+            nodeType: resolveNodeType(newNode.properties)
           })
 
           // Add the node to the raw graph

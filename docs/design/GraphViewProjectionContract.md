@@ -35,6 +35,13 @@ grouping, layout or which graph tab is open. The four view ids are query
 profiles because each one enforces a different relation filter; visual
 configuration and layout live in the WebUI.
 
+The `fault-causes` WebUI layout is a deterministic layered tree. A node on
+deeper depth is attached to its connected `LogicGate` on the preceding depth
+when one exists, so all of that gate's inputs occupy one adjacent horizontal
+group and the gate is centred above the group. Nodes that feed several gates
+cannot be adjacent to every parent; the layout makes a stable best-effort
+choice by node id.
+
 ## Storage fields
 
 Validated domain payloads are persisted as backend-safe scalar fields:

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   isFaultEventType,
+  isLogicGateType,
   resolveNodeType
 } from './nodeType'
 
@@ -22,5 +23,13 @@ describe('node type display', () => {
     expect(isFaultEventType('fault_event')).toBe(true)
     expect(isFaultEventType('Equipment')).toBe(false)
     expect(isFaultEventType(undefined)).toBe(false)
+  })
+
+  test('recognizes the ontology and localized logic-gate spellings', () => {
+    expect(isLogicGateType('LogicGate')).toBe(true)
+    expect(isLogicGateType('logic_gate')).toBe(true)
+    expect(isLogicGateType('逻辑门')).toBe(true)
+    expect(isLogicGateType('FaultEvent')).toBe(false)
+    expect(isLogicGateType(undefined)).toBe(false)
   })
 })

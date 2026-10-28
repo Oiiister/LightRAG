@@ -11,3 +11,9 @@ export const resolveNodeType = (
 export const isFaultEventType = (nodeType: unknown): boolean =>
   typeof nodeType === 'string' &&
   nodeType.toLowerCase().replace(/[\s_-]/g, '') === 'faultevent'
+
+export const isLogicGateType = (nodeType: unknown): boolean => {
+  if (typeof nodeType !== 'string') return false
+  const normalized = nodeType.toLowerCase().replace(/[\s_-]/g, '')
+  return normalized === 'logicgate' || normalized === '逻辑门'
+}
