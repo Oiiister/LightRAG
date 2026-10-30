@@ -1,0 +1,553 @@
+ontology_version: industrial-fault-v0.1
+
+classes:
+  Asset:
+    label: 资产
+    prompt_visible: false
+
+  KnowledgeEntity:
+    label: 知识实体
+    prompt_visible: false
+
+  Department:
+    label: 部门
+    prompt_visible: false
+    required: [uid, name]
+
+  File:
+    label: 数据资产文件
+    prompt_visible: false
+    required: [uid, file_name, file_type, parse_status]
+
+  Equipment:
+    label: 具体工业设备
+    parent: Asset
+    prompt_visible: true
+    required: [name, equipment_tag, equipment_type]
+    extract_properties:
+      name: {type: string}
+      equipment_tag: {type: string}
+      equipment_type: {type: string}
+      functional_location: {type: string}
+      aliases: {type: string_list}
+      manufacturer: {type: string}
+      model: {type: string}
+      serial_number: {type: string}
+
+  FaultEvent:
+    label: 故障事件
+    parent: KnowledgeEntity
+    prompt_visible: true
+    required: [name, description]
+    extract_properties:
+      name: {type: string}
+      description: {type: string}
+      aliases: {type: string_list}
+      symptoms: {type: string_list}
+      maintenance_measures: {type: string_list}
+      severity: {type: enum, values: [low, medium, high, critical, unknown]}
+      fault_category: {type: string}
+      cause_rule: {type: expression}
+
+  FaultCauseRule:
+    label: 故障因果规则
+    prompt_visible: false
+    required: [effect_fault_uid, expression]
+
+  LogicGate:
+    label: 逻辑门
+    prompt_visible: false
+    required: [gate_type, output_fault_uid]
+
+relations:
+  CAUSES:
+    source: FaultEvent
+    target: FaultEvent
+    directed: true
+    prompt_visible: true
+    evidence_required: true
+    properties:
+      gate_type_hint: [AND, OR]
+      gate_key: string
+
+  HAS_FAULT:
+    source: Equipment
+    target: FaultEvent
+    directed: true
+    prompt_visible: true
+    evidence_required: true
+
+  HAS_EQUIPMENT:
+    source: Department
+    target: Equipment
+    directed: true
+    prompt_visible: false
+    system_generated: true
+
+  HAS_SUB_DEPARTMENT:
+    source: Department
+    target: Department
+    directed: true
+    prompt_visible: false
+    system_generated: true
+
+  OWNS_FILE:
+    source: Department
+    target: File
+    directed: true
+    prompt_visible: false
+    system_generated: true
+
+  DESCRIBES_EQUIPMENT:
+    source: File
+    target: Equipment
+    directed: true
+    prompt_visible: false
+    system_generated: true
+
+  PROVIDES_EVIDENCE_FOR:
+    source: File
+    target: [FaultEvent, FaultCauseRule, LogicGate]
+    directed: true
+    prompt_visible: false
+    system_generated: true
+    evidence_required: true
+
+  HAS_CAUSE_RULE:
+    source: FaultEvent
+    target: FaultCauseRule
+    directed: true
+    prompt_visible: false
+    system_generated: true
+
+  INPUT_OF:
+    source: [FaultEvent, LogicGate]
+    target: LogicGate
+    directed: true
+    prompt_visible: false
+    system_generated: true
+
+  OUTPUT_TO:
+    source: LogicGate
+    target: FaultEvent
+    directed: true
+    prompt_visible: false
+    system_generated: true
+
+domain_instructions: |
+  抽取目标是恢复尽可能完整的故障传播链，而不是只收集设备与最终症状。
+
+  “原因”“故障原因”、故障位条件、异常状态以及故障传播中的中间结果，
+  每一类都必须分别输出为 FaultEvent。具体工业设备输出为 Equipment。
+  不要抽取维修措施、检测动作、预防建议或与故障因果无关的背景描述。
+
+  故障与故障之间的直接因果使用 CAUSES：
+  - source 是原因，target 是结果，方向固定为原因 -> 结果。
+  - 多个相互独立、任一成立即可触发结果的原因使用 gate_type_hint=OR。
+  - 只有原文明确要求多个原因同时成立时才使用 gate_type_hint=AND。
+  - 同一结果、同一组原因必须使用相同的 gate_key。
+  - gate_key 在跨 Chunk 时必须保持稳定，不要使用 local_id。
+  - 单一原因直接导致结果时可以省略 gate_type_hint 和 gate_key。
+
+  同一故障在整段文本中必须使用统一的规范名称。原文中的同义称呼写入
+  aliases，不要把“供气不足”“供气时有时无”等近义表现无依据地拆成
+  多个无法合并的故障实体。若原文明确说明它们是不同的可观察状态，
+  可以分别输出，但必须保留各自的原文证据。
+
+  原文形成 A -> B -> C 时，必须同时保留 A -> B 和 B -> C，不能为了
+  减少输出而压缩成 A -> C。只要一个 FaultEvent 同时具有上游原因和
+  下游结果，就必须保留它在链条中的位置。
+
+  AND/OR 结构必须同步写入结果 FaultEvent 的 cause_rule：
+  - 单原因：{"event_local_id": "<当前 Chunk 内的 local_id>"}
+  - OR：{"op": "OR", "children": [{"event_local_id": "..."}, ...]}
+  - AND：{"op": "AND", "children": [{"event_local_id": "..."}, ...]}
+  - AND/OR 表达式可以递归嵌套，每个内部表达式至少包含两个 children。
+  - cause_rule 只能引用当前 Chunk 中已经输出的 FaultEvent local_id。
+  - 跨 Chunk 的因果续接依赖规范实体名和稳定 gate_key，不要引用其他
+    Chunk 中不可见的 local_id。
+
+  HAS_FAULT 的 source 必须是 Equipment，target 必须是 FaultEvent。
+  只在原文明确说明设备发生过、正在发生或可能发生该故障时输出 HAS_FAULT。
+  不要输出 Department、File、FaultCauseRule 或 LogicGate 实体。
+
+  每个实体和关系都必须包含 evidence，且每个 quote 必须逐字复制当前
+  输入文本中的连续片段。不要改写、概括、翻译、拼接或补全 quote。
+  没有原文证据的因果关系必须省略，不得引入文本外常识。
+
+  记录数量受限时，优先输出能构成完整链路的实体和 CAUSES 关系，
+  再输出症状、维护信息等辅助属性。不要在故障链尚不完整时用低价值
+  描述占满记录上限。
+
+  最终自检：
+  - 是否遗漏了原文中可识别的中间故障。
+  - 是否把 A 和 B 同时导致 C 错写成两条独立的单因果边。
+  - 是否把可继续追溯的原因错误地当成了链条终点。
+  - 是否复用了同义故障的规范名和一致的 gate_key。
+  - 是否每条记录都带有逐字匹配原文的 evidence.quote。
+
+entity_extraction_json_examples:
+  - |
+    {
+      "entities": [
+        {
+          "local_id": "eq1",
+          "name": "空压机",
+          "type": "Equipment",
+          "description": "发生供气系统故障的螺杆空压机",
+          "equipment_tag": "AC-01",
+          "equipment_type": "螺杆空压机",
+          "aliases": ["螺杆空压机"],
+          "evidence": [
+            {"quote": "螺杆空压机"}
+          ]
+        },
+        {
+          "local_id": "e1",
+          "name": "进气过滤器堵塞",
+          "type": "FaultEvent",
+          "description": "过滤器阻力增大并使进气量下降",
+          "evidence": [
+            {"quote": "进气过滤器堵塞会降低进气量"}
+          ]
+        },
+        {
+          "local_id": "e2",
+          "name": "进气阀故障",
+          "type": "FaultEvent",
+          "description": "进气阀不能按要求开启",
+          "evidence": [
+            {"quote": "进气阀故障会使进气通道不能正常开启"}
+          ]
+        },
+        {
+          "local_id": "e3",
+          "name": "供气系统问题",
+          "type": "FaultEvent",
+          "description": "进气量不足或进气通道异常造成供气能力下降",
+          "cause_rule": {
+            "op": "OR",
+            "children": [
+              {"event_local_id": "e1"},
+              {"event_local_id": "e2"}
+            ]
+          },
+          "evidence": [
+            {"quote": "两者都会造成供气系统问题"}
+          ]
+        },
+        {
+          "local_id": "e4",
+          "name": "空压机系统故障",
+          "type": "FaultEvent",
+          "description": "供气系统问题继续导致整机无法正常供气",
+          "cause_rule": {
+            "event_local_id": "e3"
+          },
+          "evidence": [
+            {"quote": "最终导致空压机系统故障"}
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "source": "进气过滤器堵塞",
+          "target": "供气系统问题",
+          "relation_code": "CAUSES",
+          "gate_type_hint": "OR",
+          "gate_key": "供气系统问题_进气侧原因",
+          "keywords": "故障因果",
+          "description": "进气过滤器堵塞可单独导致供气系统问题",
+          "evidence": [
+            {"quote": "两者都会造成供气系统问题"}
+          ]
+        },
+        {
+          "source": "进气阀故障",
+          "target": "供气系统问题",
+          "relation_code": "CAUSES",
+          "gate_type_hint": "OR",
+          "gate_key": "供气系统问题_进气侧原因",
+          "keywords": "故障因果",
+          "description": "进气阀故障可单独导致供气系统问题",
+          "evidence": [
+            {"quote": "两者都会造成供气系统问题"}
+          ]
+        },
+        {
+          "source": "供气系统问题",
+          "target": "空压机系统故障",
+          "relation_code": "CAUSES",
+          "keywords": "故障因果",
+          "description": "供气系统问题进一步导致空压机系统故障",
+          "evidence": [
+            {"quote": "最终导致空压机系统故障"}
+          ]
+        },
+        {
+          "source": "空压机",
+          "target": "空压机系统故障",
+          "relation_code": "HAS_FAULT",
+          "keywords": "设备故障",
+          "description": "螺杆空压机发生系统级故障",
+          "evidence": [
+            {"quote": "空压机系统故障"}
+          ]
+        }
+      ]
+    }
+  - |
+    {
+      "entities": [
+        {
+          "local_id": "eq1",
+          "name": "循环水装置",
+          "type": "Equipment",
+          "description": "由冷却水回路和散热风扇共同维持冷却功能的装置",
+          "equipment_tag": "CWS-01",
+          "equipment_type": "循环水系统",
+          "evidence": [
+            {"quote": "循环水装置"}
+          ]
+        },
+        {
+          "local_id": "e1",
+          "name": "冷却水回路堵塞",
+          "type": "FaultEvent",
+          "description": "冷却水回路不能保持正常流通",
+          "evidence": [
+            {"quote": "冷却水回路堵塞与散热风扇停转同时发生时"}
+          ]
+        },
+        {
+          "local_id": "e2",
+          "name": "散热风扇停转",
+          "type": "FaultEvent",
+          "description": "散热风扇停止提供冷却风量",
+          "evidence": [
+            {"quote": "冷却水回路堵塞与散热风扇停转同时发生时"}
+          ]
+        },
+        {
+          "local_id": "e3",
+          "name": "冷却功能丧失",
+          "type": "FaultEvent",
+          "description": "堵塞和风扇停转同时成立后冷却功能无法维持",
+          "cause_rule": {
+            "op": "AND",
+            "children": [
+              {"event_local_id": "e1"},
+              {"event_local_id": "e2"}
+            ]
+          },
+          "evidence": [
+            {"quote": "冷却功能才会丧失"}
+          ]
+        },
+        {
+          "local_id": "e4",
+          "name": "电机温度升高",
+          "type": "FaultEvent",
+          "description": "冷却功能丧失后电机温度上升",
+          "cause_rule": {
+            "event_local_id": "e3"
+          },
+          "evidence": [
+            {"quote": "冷却功能丧失会引起电机温度升高"}
+          ]
+        },
+        {
+          "local_id": "e5",
+          "name": "系统停机联锁",
+          "type": "FaultEvent",
+          "description": "电机温度升高进一步触发系统停机",
+          "cause_rule": {
+            "event_local_id": "e4"
+          },
+          "evidence": [
+            {"quote": "并最终触发系统停机联锁"}
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "source": "冷却水回路堵塞",
+          "target": "冷却功能丧失",
+          "relation_code": "CAUSES",
+          "gate_type_hint": "AND",
+          "gate_key": "冷却功能丧失_共同原因",
+          "keywords": "故障因果",
+          "description": "冷却水回路堵塞必须与散热风扇停转同时发生",
+          "evidence": [
+            {"quote": "冷却水回路堵塞与散热风扇停转同时发生时"}
+          ]
+        },
+        {
+          "source": "散热风扇停转",
+          "target": "冷却功能丧失",
+          "relation_code": "CAUSES",
+          "gate_type_hint": "AND",
+          "gate_key": "冷却功能丧失_共同原因",
+          "keywords": "故障因果",
+          "description": "散热风扇停转必须与冷却水回路堵塞同时发生",
+          "evidence": [
+            {"quote": "冷却水回路堵塞与散热风扇停转同时发生时"}
+          ]
+        },
+        {
+          "source": "冷却功能丧失",
+          "target": "电机温度升高",
+          "relation_code": "CAUSES",
+          "keywords": "故障因果",
+          "description": "冷却功能丧失导致电机温度升高",
+          "evidence": [
+            {"quote": "冷却功能丧失会引起电机温度升高"}
+          ]
+        },
+        {
+          "source": "电机温度升高",
+          "target": "系统停机联锁",
+          "relation_code": "CAUSES",
+          "keywords": "故障因果",
+          "description": "电机温度升高最终触发系统停机联锁",
+          "evidence": [
+            {"quote": "并最终触发系统停机联锁"}
+          ]
+        },
+        {
+          "source": "循环水装置",
+          "target": "系统停机联锁",
+          "relation_code": "HAS_FAULT",
+          "keywords": "设备故障",
+          "description": "循环水装置发生系统停机联锁故障",
+          "evidence": [
+            {"quote": "系统停机联锁"}
+          ]
+        }
+      ]
+    }
+  - |
+    {
+      "entities": [
+        {
+          "local_id": "eq1",
+          "name": "工艺装置",
+          "type": "Equipment",
+          "description": "发生误停机的工艺处理装置",
+          "equipment_tag": "PROC-01",
+          "equipment_type": "工艺处理装置",
+          "evidence": [
+            {"quote": "装置误停机"}
+          ]
+        },
+        {
+          "local_id": "e1",
+          "name": "压力变送器零点漂移",
+          "type": "FaultEvent",
+          "description": "压力变送器零位发生偏移",
+          "evidence": [
+            {"quote": "压力变送器零点漂移会导致压力读数失真"}
+          ]
+        },
+        {
+          "local_id": "e2",
+          "name": "压力读数失真",
+          "type": "FaultEvent",
+          "description": "压力测量结果不能反映真实压力",
+          "cause_rule": {
+            "event_local_id": "e1"
+          },
+          "evidence": [
+            {"quote": "压力变送器零点漂移会导致压力读数失真"}
+          ]
+        },
+        {
+          "local_id": "e3",
+          "name": "控制器误判",
+          "type": "FaultEvent",
+          "description": "控制器依据失真读数作出错误判断",
+          "cause_rule": {
+            "event_local_id": "e2"
+          },
+          "evidence": [
+            {"quote": "压力读数失真进一步造成控制器误判"}
+          ]
+        },
+        {
+          "local_id": "e4",
+          "name": "泄放阀误开启",
+          "type": "FaultEvent",
+          "description": "控制器误发命令使泄放阀错误开启",
+          "cause_rule": {
+            "event_local_id": "e3"
+          },
+          "evidence": [
+            {"quote": "控制器误判会误发泄放阀开启命令"}
+          ]
+        },
+        {
+          "local_id": "e5",
+          "name": "装置误停机",
+          "type": "FaultEvent",
+          "description": "泄放阀误开启最终造成装置错误停机",
+          "cause_rule": {
+            "event_local_id": "e4"
+          },
+          "evidence": [
+            {"quote": "最终触发装置误停机"}
+          ]
+        }
+      ],
+      "relationships": [
+        {
+          "source": "压力变送器零点漂移",
+          "target": "压力读数失真",
+          "relation_code": "CAUSES",
+          "keywords": "故障因果",
+          "description": "零点漂移导致压力读数失真",
+          "evidence": [
+            {"quote": "压力变送器零点漂移会导致压力读数失真"}
+          ]
+        },
+        {
+          "source": "压力读数失真",
+          "target": "控制器误判",
+          "relation_code": "CAUSES",
+          "keywords": "故障因果",
+          "description": "压力读数失真进一步造成控制器误判",
+          "evidence": [
+            {"quote": "压力读数失真进一步造成控制器误判"}
+          ]
+        },
+        {
+          "source": "控制器误判",
+          "target": "泄放阀误开启",
+          "relation_code": "CAUSES",
+          "keywords": "故障因果",
+          "description": "控制器误判使泄放阀错误开启",
+          "evidence": [
+            {"quote": "控制器误判会误发泄放阀开启命令"}
+          ]
+        },
+        {
+          "source": "泄放阀误开启",
+          "target": "装置误停机",
+          "relation_code": "CAUSES",
+          "keywords": "故障因果",
+          "description": "泄放阀误开启最终触发装置误停机",
+          "evidence": [
+            {"quote": "最终触发装置误停机"}
+          ]
+        },
+        {
+          "source": "工艺装置",
+          "target": "装置误停机",
+          "relation_code": "HAS_FAULT",
+          "keywords": "设备故障",
+          "description": "工艺装置发生误停机故障",
+          "evidence": [
+            {"quote": "装置误停机"}
+          ]
+        }
+      ]
+    }

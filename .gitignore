@@ -58,8 +58,7 @@ output/
 rag_storage/
 data/
 
-# User cumstomized prompt directory
-prompts/entity_type/
+
 
 # User-defined UI template bundle (UI_TEMPLATES_DIR).
 # Source deployments keep it here; Docker deployments use ./data/ui_templates
